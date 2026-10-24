@@ -61,8 +61,9 @@ body of one or two sentences on why it matters, not only what to click.
 ## Inside the app
 
 stepcast's own AI mode asks a vision model (the user's key, through llm-connect)
-to place boxes on a 0–1000 grid drawn over each screenshot, then converts them to
-the 0–1 boxes above. Without a key, the same prompt and a picture of the
+to write the demo with boxes on a 0–1000 scale of each screenshot and a precise
+description of every target, then places each box with one small request per
+screenshot, and converts them to the 0–1 boxes above. Without a key, the same prompt and a picture of the
 screenshots can be pasted into any chat app, and the JSON answer pasted back.
 
 ## Share links

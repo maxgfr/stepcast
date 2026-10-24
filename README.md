@@ -7,25 +7,33 @@ a zoom on small targets, blurs over personal data, and replacements for text on 
 anything by hand, then share a link. It is frontend only: no account, no server, nothing
 uploaded.
 
-**→ [maxgfr.github.io/stepcast](https://maxgfr.github.io/stepcast/)**
+**→ [maxgfr.github.io/stepcast](https://maxgfr.github.io/stepcast/)** ·
+**[▶ the 1-minute video](https://maxgfr.github.io/stepcast/media/stepcast-demo.mp4)** (a real session:
+recording a to-do app, AI mode with Claude, review, share)
 
 ![A stepcast tour of stepcast](docs/demo.gif)
 
 ## How it works
 
-1. **Record.** Share a tab, a window or your screen and click through your product. Four times a
-   second, a tiny copy of the screen goes to a keyframe detector: a screen that has changed and
-   then holds still (a page loaded, a menu opened) is saved as a full-resolution screenshot.
-   **Snap step** saves the current screen right away, and the floating controls (Document
-   Picture-in-Picture) stay on top of your other windows. You can also import a video or a set of
-   screenshots.
+1. **Record.** Share a tab, a window or your screen and click through your product. Five times a
+   second, a small copy of the screen goes to a keyframe detector, which keeps every screen worth
+   having: the screen just **before** each change (the cursor resting on what is about to be
+   clicked), the screen **after** it settles, and one per second while it keeps moving (scrolling,
+   typing). Each new screenshot is compared with all the ones already taken, so going back to a
+   screen never stores it twice. **Snap step** saves the current screen right away, and the
+   floating controls (Document Picture-in-Picture) stay on top of your other windows. You can also
+   import a video (same detector) or a set of screenshots.
 2. **Let AI direct** (AI mode). Say in one sentence what the demo should show, plus the audience,
-   tone, language and number of steps. When there are many frames, a first request sends them as
-   numbered contact sheets and the model picks the key screens. A second request sends those
-   screens with a labeled 0–1000 grid drawn over them (models place boxes much better with marks
-   to read) and gets back the whole demo as structured JSON: titles, tooltips, hotspots, zooms,
-   highlights, blurs and text edits. Each step then has a **Refine with AI** box ("point at the
-   Export button", "shorter").
+   tone, language, number of steps and any text to replace ("Globex Corp" → "Acme"). Three passes:
+   when there are many frames, numbered contact sheets go out in one request and the model picks
+   the key screens; the chosen screens then go out together and the model writes the whole demo
+   as structured JSON, describing each target ("the 'Active' filter link under the list"); last,
+   one small request per step, in parallel, on the clean screenshot, places every box: hotspot,
+   highlights, blurs over personal data, and each occurrence of the text to replace. Asked about
+   a few named things on one image, models place boxes exactly; the zoom is then rebuilt around
+   the panel that holds the target. Each step has a **Refine with AI** box ("point at the Export
+   button", "shorter"). Tooltips go on the side of the hotspot where they stay inside the frame
+   and cover no highlight.
 3. **Or do it by hand** (manual mode). Pick screenshots from the strip or scrub the recording, and
    draw hotspots, zooms, highlights, blurs and text replacements on the stage.
 4. **Share.** Before anything leaves the app, redactions and text edits are painted into the
@@ -73,6 +81,7 @@ bun run lint && bun run typecheck
 bun run build      # dist/, deployed to GitHub Pages by .github/workflows/pages.yml
 bun run catalog    # refresh public/models.json, the offline fallback of the model catalog
 bun scripts/make-sample.ts --gif   # rebuild the home page demo and docs/demo.gif (after a build)
+STEPCAST_KEY=sk-ant-… bun scripts/make-video.ts   # re-film public/media/stepcast-demo.mp4 (real model, needs ffmpeg)
 ```
 
 Stack: Bun, TypeScript, Preact with signals, Zod, the AI SDK through llm-connect, Mediabunny and

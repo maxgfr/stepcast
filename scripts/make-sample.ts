@@ -45,6 +45,7 @@ const ANSWER = {
     title: ["Open the workspace", "Create a project", "Invite your team"][image - 1],
     body: "The AI wrote this tooltip from your screenshot.",
     action: "click",
+    target: "the main button",
     hotspot: { x: 380, y: 420, w: 240, h: 120 },
     placement: "auto",
     zoom: null,

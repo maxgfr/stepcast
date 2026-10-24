@@ -43,29 +43,68 @@ function ProjectCard({ p, onDelete }: { p: Project; onDelete: () => void }) {
   );
 }
 
+const EXAMPLES = [
+  { file: "sample.txt", label: "How stepcast works" },
+  { file: "todomvc.txt", label: "Made by AI from a recording" },
+] as const;
+
 function Sample() {
-  const demo = useSignal<Demo | null>(null);
+  const which = useSignal(0);
+  const demos = useSignal<Record<number, Demo>>({});
   const failed = useSignal(false);
   useEffect(() => {
-    fetch("./examples/sample.txt")
+    const i = which.value;
+    if (demos.value[i]) return;
+    const ex = EXAMPLES[i];
+    if (!ex) return;
+    fetch(`./examples/${ex.file}`)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error("missing"))))
       .then(decodeBundle)
       .then((d) => {
-        demo.value = withObjectUrls(d);
+        demos.value = { ...demos.value, [i]: withObjectUrls(d) };
       })
       .catch(() => {
         failed.value = true;
       });
-  }, []);
-  if (demo.value) return <Player demo={demo.value} branding={false} />;
+  }, [which.value]);
+  const demo = demos.value[which.value];
   return (
-    <div class={`sample-placeholder ${failed.value ? "" : "is-loading"}`} aria-hidden="true" />
+    <>
+      <div class="sample-tabs" role="tablist" aria-label="Examples">
+        {EXAMPLES.map((ex, i) => (
+          <button
+            key={ex.file}
+            type="button"
+            role="tab"
+            aria-selected={which.value === i}
+            class={which.value === i ? "is-on" : ""}
+            onClick={() => (which.value = i)}
+          >
+            {i === 1 && <Icon name="sparkles" size={14} />} {ex.label}
+          </button>
+        ))}
+      </div>
+      {demo ? (
+        <Player key={which.value} demo={demo} branding={false} />
+      ) : (
+        <div class={`sample-placeholder ${failed.value ? "" : "is-loading"}`} aria-hidden="true" />
+      )}
+    </>
+  );
+}
+
+function VideoModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal title="stepcast in one minute" onClose={onClose} wide>
+      <video class="demo-video" src="./media/stepcast-demo.mp4" controls autoPlay playsInline />
+    </Modal>
   );
 }
 
 export function Home() {
   const projects = useSignal<Project[]>([]);
   const busy = useSignal<{ text: string; ratio: number } | null>(null);
+  const video = useSignal(false);
   const abort = useRef<AbortController | null>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
@@ -160,6 +199,9 @@ export function Home() {
             </Button>
           </div>
           <div class="hero-more">
+            <button type="button" class="link-btn" onClick={() => (video.value = true)}>
+              <Icon name="play" size={15} /> Watch the 1-minute video
+            </button>
             <button type="button" class="link-btn" onClick={() => imageInput.current?.click()}>
               <Icon name="image" size={15} /> Start from screenshots
             </button>
@@ -257,6 +299,7 @@ export function Home() {
         }}
       />
 
+      {video.value && <VideoModal onClose={() => (video.value = false)} />}
       {busy.value && (
         <Modal title="Importing" onClose={() => abort.current?.abort()}>
           <p>{busy.value.text}</p>
