@@ -4,6 +4,7 @@
  * answer is pasted back.
  */
 import { signal, useSignal } from "@preact/signals";
+import { RESPONSE_LANGUAGES, toLanguageCode } from "llm-connect";
 import { useEffect, useRef } from "preact/hooks";
 import { type Brief, DEFAULT_BRIEF, type FrameNote, pastePrompt } from "../ai/prompts";
 import { parseDemoAnswer, stepsFromAnswer } from "../ai/schema";
@@ -16,11 +17,20 @@ import { assetUrl, project, selectedStep, updateDemo } from "./state";
 import { Button, copyText, errorText, Field, Icon, Modal, toast } from "./ui";
 
 const BRIEF_KEY = "stepcast-brief";
+/** Older briefs stored the language's name ("French"): keep its code. */
+function migrate(b: Brief): Brief {
+  return { ...b, language: toLanguageCode(b.language) };
+}
 function loadBrief(): Brief {
   try {
     const raw = localStorage.getItem(BRIEF_KEY);
     return raw
-      ? { ...DEFAULT_BRIEF, ...(JSON.parse(raw) as Partial<Brief>), goal: "", replacements: [] }
+      ? migrate({
+          ...DEFAULT_BRIEF,
+          ...(JSON.parse(raw) as Partial<Brief>),
+          goal: "",
+          replacements: [],
+        })
       : DEFAULT_BRIEF;
   } catch {
     return DEFAULT_BRIEF;
@@ -37,18 +47,6 @@ function saveBrief(b: Brief) {
   }
 }
 
-const LANGUAGES = [
-  "English",
-  "French",
-  "German",
-  "Spanish",
-  "Italian",
-  "Portuguese",
-  "Dutch",
-  "Japanese",
-  "Chinese",
-  "Korean",
-];
 const TONES = [
   "friendly and concise",
   "professional",
@@ -101,8 +99,10 @@ async function applyResult(
       ...d,
       title: untitled && meta.title ? meta.title : d.title,
       description: d.description || meta.description,
+      // The texts are now in the brief's language: so are the player's buttons.
+      language: toLanguageCode(brief.value.language),
       intro: meta.intro.title
-        ? { title: meta.intro.title, body: meta.intro.body, button: d.intro?.button || "Start" }
+        ? { title: meta.intro.title, body: meta.intro.body, button: d.intro?.button ?? "" }
         : d.intro,
       outro: meta.outro.title
         ? {
@@ -542,11 +542,14 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
             <Field label="Language">
               <select
                 class="input"
-                value={b.language}
+                value={toLanguageCode(b.language)}
                 onChange={(e) => saveBrief({ ...b, language: e.currentTarget.value })}
               >
-                {LANGUAGES.map((l) => (
-                  <option key={l}>{l}</option>
+                {RESPONSE_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label}
+                    {l.label !== l.name ? ` · ${l.name}` : ""}
+                  </option>
                 ))}
               </select>
             </Field>

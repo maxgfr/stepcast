@@ -23,8 +23,8 @@ import {
   providerKindOf,
   usableEffort,
 } from "llm-connect";
-import type { z } from "zod";
-import type { Step } from "../model/demo";
+import { z } from "zod";
+import type { Demo, Step } from "../model/demo";
 import { applyGrounding, groundPrompt, groundSchema, targetsOf } from "./ground";
 import {
   activeReplacements,
@@ -35,6 +35,7 @@ import {
   pickPrompt,
   refineInstructions,
   refineText,
+  translateInstructions,
 } from "./prompts";
 import {
   applyFields,
@@ -129,9 +130,10 @@ async function call<S extends z.ZodType>(
   messages: ModelMessage[],
   effort: "low" | "medium",
   signal?: AbortSignal,
+  needsVision = true,
 ): Promise<z.infer<S>> {
   const capabilities = capabilitiesOf(settings);
-  if (!capabilities.vision) {
+  if (needsVision && !capabilities.vision) {
     throw new AiError(
       "This model does not accept images. Pick a vision model in AI settings (Claude, GPT-5, Gemini…).",
     );
@@ -319,4 +321,54 @@ export async function refineStep(
     signal,
   );
   return applyFields(step, await placeStep(settings, answer, url, [], signal));
+}
+
+const translateSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  intro: z.object({ title: z.string(), body: z.string(), button: z.string() }).nullable(),
+  outro: z.object({ title: z.string(), body: z.string(), ctaLabel: z.string() }).nullable(),
+  steps: z.array(z.object({ id: z.string(), title: z.string(), body: z.string() })),
+});
+
+/** Every text of the demo rewritten in another language; boxes and pictures untouched. */
+export async function translateDemo(
+  settings: LlmSettings,
+  demo: Demo,
+  language: string,
+  signal?: AbortSignal,
+): Promise<Demo> {
+  const source = {
+    title: demo.title,
+    description: demo.description,
+    intro: demo.intro
+      ? { title: demo.intro.title, body: demo.intro.body, button: demo.intro.button }
+      : null,
+    outro: demo.outro
+      ? { title: demo.outro.title, body: demo.outro.body, ctaLabel: demo.outro.ctaLabel }
+      : null,
+    steps: demo.steps.map((s) => ({ id: s.id, title: s.title, body: s.body })),
+  };
+  const out = await call(
+    settings,
+    translateSchema,
+    translateInstructions(language),
+    [{ role: "user", content: [{ type: "text", text: JSON.stringify(source, null, 2) }] }],
+    "low",
+    signal,
+    false,
+  );
+  const byId = new Map(out.steps.map((s) => [s.id, s]));
+  return {
+    ...demo,
+    language,
+    title: out.title || demo.title,
+    description: out.description,
+    intro: demo.intro && out.intro ? { ...demo.intro, ...out.intro } : demo.intro,
+    outro: demo.outro && out.outro ? { ...demo.outro, ...out.outro } : demo.outro,
+    steps: demo.steps.map((s) => {
+      const t = byId.get(s.id);
+      return t ? { ...s, title: t.title, body: t.body } : s;
+    }),
+  };
 }

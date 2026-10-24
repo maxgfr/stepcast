@@ -2,6 +2,7 @@
  * The words sent to the model. Kept apart from the plumbing so they can be read,
  * tested and tuned on their own. The copy-paste mode sends the same rules.
  */
+import { browserLanguage, languageName } from "llm-connect";
 import { z } from "zod";
 import type { Box } from "../model/demo";
 import { demoAnswerSchema, type RefineAnswer, toGrid } from "./schema";
@@ -19,7 +20,7 @@ export interface Brief {
   audience: string;
   tone: string;
   maxSteps: number;
-  /** English name of the language the demo is written in. */
+  /** ISO 639-1 code of the language the demo is written in (llm-connect's RESPONSE_LANGUAGES). */
   language: string;
   /** Blur personal and secret data. */
   redact: boolean;
@@ -34,7 +35,7 @@ export const DEFAULT_BRIEF: Brief = {
   audience: "people discovering the product",
   tone: "friendly and concise",
   maxSteps: 8,
-  language: "English",
+  language: typeof navigator === "undefined" ? "en" : browserLanguage(),
   redact: true,
   zoom: true,
   replacements: [],
@@ -64,7 +65,7 @@ function briefBlock(b: Brief): string {
     `GOAL OF THE DEMO: ${b.goal.trim() || "Walk a new user through what the recording shows."}`,
     `Audience: ${b.audience || DEFAULT_BRIEF.audience}.`,
     `Tone: ${b.tone || DEFAULT_BRIEF.tone}.`,
-    `Write every title and text in ${b.language || "English"}.`,
+    `Write every title and text in ${languageName(b.language)}.`,
     `At most ${b.maxSteps} steps.`,
     ...activeReplacements(b).map(
       (r) =>
@@ -167,7 +168,7 @@ export function refineInstructions(b: Brief): string {
     "",
     "Keep `target` (the element the hotspot points at) precise: its label or icon and where it is.",
     "",
-    `Write in ${b.language || "English"}. Titles at most 6 words, body at most 30 words.`,
+    `Write in ${languageName(b.language)}. Titles at most 6 words, body at most 30 words.`,
   ].join("\n");
 }
 
@@ -191,5 +192,15 @@ export function pastePrompt(b: Brief, notes: FrameNote[]): string {
     "",
     "Answer with only the JSON object, in a ```json code block, matching this JSON Schema:",
     schema,
+  ].join("\n");
+}
+
+export function translateInstructions(code: string): string {
+  return [
+    `You translate the texts of an interactive product demo into ${languageName(code)}. You receive them as JSON and return the same JSON, same ids, every text translated.`,
+    "- Keep the meaning, the tone and the length: titles stay short imperatives, bodies one or two sentences.",
+    "- Names of buttons, links, menus and fields stay exactly as they appear on screen (the screenshots are not translated), in quotes when they were quoted.",
+    "- Product and company names are not translated.",
+    `- Text already in ${languageName(code)} is kept, corrected only if wrong.`,
   ].join("\n");
 }

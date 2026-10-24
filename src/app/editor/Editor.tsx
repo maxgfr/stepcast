@@ -1,4 +1,5 @@
 import { useSignal } from "@preact/signals";
+import { languageName, RESPONSE_LANGUAGES, toLanguageCode } from "llm-connect";
 import { useEffect, useRef } from "preact/hooks";
 import { clock } from "../../ai/prompts";
 import { frameOf, seek, videoDuration } from "../../capture/import";
@@ -321,6 +322,62 @@ function StepInspector({ step }: { step: Step }) {
   );
 }
 
+function DemoLanguage() {
+  const d = project.value?.demo;
+  const busy = useSignal(false);
+  if (!d) return null;
+  const translate = async () => {
+    const { savedSettings, loadLlmSettings } = await import("../../ai/settings");
+    await loadLlmSettings();
+    const settings = savedSettings();
+    if (!settings) {
+      toast("Set up a model first (AI button, top right).", "error");
+      return;
+    }
+    busy.value = true;
+    try {
+      const { translateDemo } = await import("../../ai/run");
+      const current = project.value?.demo;
+      if (!current) return;
+      const next = await translateDemo(settings, current, current.language);
+      updateDemo(() => next);
+      toast(`Translated into ${languageName(current.language)}.`, "success");
+    } catch (err) {
+      toast(errorText(err), "error", 7000);
+    } finally {
+      busy.value = false;
+    }
+  };
+  return (
+    <Field
+      label="Language"
+      hint="The player's buttons follow it. Translate rewrites every title and text with AI; the screenshots stay as they are."
+    >
+      <div class="row">
+        <select
+          class="input lang-select"
+          value={toLanguageCode(d.language)}
+          onChange={(e) => updateDemo((x) => ({ ...x, language: e.currentTarget.value }))}
+        >
+          {RESPONSE_LANGUAGES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          icon="sparkles"
+          disabled={busy.value || d.steps.length === 0}
+          onClick={() => void translate()}
+        >
+          {busy.value ? "Translating…" : "Translate"}
+        </Button>
+      </div>
+    </Field>
+  );
+}
+
 function DemoInspector() {
   const d = project.value?.demo;
   if (!d) return null;
@@ -342,6 +399,7 @@ function DemoInspector() {
           onInput={(e) => set({ description: e.currentTarget.value }, "ddesc")}
         />
       </Field>
+      <DemoLanguage />
       <label class="color">
         <input
           type="color"
@@ -358,7 +416,7 @@ function DemoInspector() {
             onChange={(e) =>
               set({
                 intro: e.currentTarget.checked
-                  ? { title: d.title, body: d.description, button: "Start" }
+                  ? { title: d.title, body: d.description, button: "" }
                   : null,
               })
             }
@@ -406,6 +464,7 @@ function DemoInspector() {
           <Field label="Button">
             <input
               class="input"
+              placeholder="Start, in the demo's language"
               value={d.intro.button}
               onInput={(e) =>
                 set(

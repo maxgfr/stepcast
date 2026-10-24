@@ -131,6 +131,7 @@ test("AI mode: record, generate with a model, share a link, export HTML", async 
   await page.getByRole("button", { name: "Save" }).click();
 
   await page.getByLabel("What should the demo show?").fill("Show the green screen");
+  await page.getByLabel("Language").selectOption("fr");
   await page.getByLabel("Text to replace 1").fill("Globex");
   await page.getByLabel("Replacement 1").fill("Acme");
   await shot(page, "ai-brief");
@@ -161,12 +162,14 @@ test("AI mode: record, generate with a model, share a link, export HTML", async 
   const player = await context.newPage();
   await player.goto(link);
   await expect(player.getByRole("heading", { name: "Meet the green screen" })).toBeVisible();
-  await player.getByRole("button", { name: "Start" }).click();
+  // A French demo: the player speaks French.
+  await expect(player.locator(".sc-player")).toHaveAttribute("lang", "fr");
+  await player.getByRole("button", { name: "Commencer" }).click();
   await expect(player.getByText("Click the shape")).toBeVisible();
   await shot(player, "player-step1");
-  await player.getByRole("button", { name: "Next: Click the shape" }).click();
+  await player.getByRole("button", { name: "Suivant: Click the shape" }).click();
   await expect(player.getByText("See the result")).toBeVisible();
-  await player.getByRole("button", { name: "Finish" }).click();
+  await player.getByRole("button", { name: "Terminer" }).click();
   await expect(player.getByRole("link", { name: "Start now" })).toHaveCount(0); // no URL set
   await expect(player.getByRole("heading", { name: "You made it" })).toBeVisible();
 
@@ -179,7 +182,8 @@ test("AI mode: record, generate with a model, share a link, export HTML", async 
   const offline = await context.newPage();
   await offline.setContent(html);
   await expect(offline.getByRole("heading", { name: "Meet the green screen" })).toBeVisible();
-  await offline.getByRole("button", { name: "Start" }).click();
+  expect(html).toContain('<html lang="fr">');
+  await offline.getByRole("button", { name: "Commencer" }).click();
   await expect(offline.getByText("Click the shape")).toBeVisible();
   expect(errors).toEqual([]);
 });

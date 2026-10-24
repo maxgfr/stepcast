@@ -48,6 +48,10 @@ export const demoSchema = z.object({
   version: z.literal(DEMO_VERSION).default(DEMO_VERSION),
   title: z.string().default("Untitled demo"),
   description: z.string().default(""),
+  language: z
+    .string()
+    .default("en")
+    .describe("ISO 639-1 code of the demo's language: its texts and the player's buttons"),
   theme: z.object({ accent: z.string().default("#6d5efc") }).default({ accent: "#6d5efc" }),
   intro: z
     .object({

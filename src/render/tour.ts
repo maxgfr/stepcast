@@ -5,6 +5,7 @@
  * it at their frame rate.
  */
 import type { Box, Demo, Step } from "../model/demo";
+import { playerLabels } from "../player/i18n";
 import { autoPlacement } from "../player/Player";
 import { FULL_VIEW, lerpView, mapBox, type View, viewFor } from "./camera";
 import { bakeToCanvas, blobToImage, makeCanvas } from "./image";
@@ -303,6 +304,7 @@ function shotAt(tour: Tour, t: number): Shot {
  * repeat exactly between transitions and a GIF can merge them.
  */
 export function frameAt(ctx: CanvasRenderingContext2D, tour: Tour, t: number, still = false): void {
+  const words = playerLabels(tour.demo.language);
   const { demo, width: W, height: H, images } = tour;
   const accent = demo.theme.accent || "#6d5efc";
   const shot = shotAt(tour, t);
@@ -317,10 +319,19 @@ export function frameAt(ctx: CanvasRenderingContext2D, tour: Tour, t: number, st
     if (img) drawImage(ctx, img, FULL_VIEW, W, H);
     const k = ease(local / 0.5);
     if (shot.kind === "intro" && demo.intro) {
-      card(ctx, W, H, demo.intro.title, demo.intro.body, demo.intro.button || "Start", accent, k);
+      card(
+        ctx,
+        W,
+        H,
+        demo.intro.title,
+        demo.intro.body,
+        demo.intro.button || words.start,
+        accent,
+        k,
+      );
     } else {
       const o = demo.outro;
-      card(ctx, W, H, o?.title || "That's the tour", o?.body ?? "", o?.ctaLabel ?? "", accent, k);
+      card(ctx, W, H, o?.title || words.end, o?.body ?? "", o?.ctaLabel ?? "", accent, k);
     }
   } else {
     const i = shot.index;

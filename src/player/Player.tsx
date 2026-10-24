@@ -7,6 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { Box, Demo, Placement, Step } from "../model/demo";
 import { cssTransform, mapBox, type View, viewFor } from "../render/camera";
 import { StepImage } from "../render/StepImage";
+import { isRtl, playerLabels } from "./i18n";
 
 export interface PlayerProps {
   demo: Demo;
@@ -281,6 +282,7 @@ export function Player({
         )
       : step.placement;
   const accent = demo.theme.accent || "#6d5efc";
+  const t = playerLabels(demo.language);
   const last = index === steps.length - 1;
 
   return (
@@ -291,6 +293,8 @@ export function Player({
       style={{ "--sc-accent": accent }}
       aria-roledescription="interactive demo"
       aria-label={demo.title}
+      lang={demo.language || "en"}
+      dir={isRtl(demo.language) ? "rtl" : "ltr"}
     >
       <div
         class="sc-frame"
@@ -319,7 +323,7 @@ export function Player({
                 width: `${hot.w * 100}%`,
                 height: `${hot.h * 100}%`,
               }}
-              aria-label={step.title ? `Next: ${step.title}` : "Next step"}
+              aria-label={step.title ? `${t.next}: ${step.title}` : t.nextStep}
               onClick={() => go(1)}
             >
               <span class="sc-beacon" />
@@ -341,11 +345,11 @@ export function Player({
                 </span>
                 {(index > 0 || demo.intro) && (
                   <button type="button" class="sc-btn sc-btn-ghost" onClick={() => go(-1)}>
-                    Back
+                    {t.back}
                   </button>
                 )}
                 <button type="button" class="sc-btn" onClick={() => go(1)}>
-                  {last ? "Finish" : "Next"}
+                  {last ? t.finish : t.next}
                 </button>
               </div>
             </div>
@@ -358,7 +362,7 @@ export function Player({
               <h2>{demo.intro.title}</h2>
               {demo.intro.body && <p>{demo.intro.body}</p>}
               <button type="button" class="sc-btn sc-btn-lg" onClick={() => setPhase("step")}>
-                {demo.intro.button || "Start"}
+                {demo.intro.button || t.start}
               </button>
             </div>
           </div>
@@ -366,7 +370,7 @@ export function Player({
         {phase === "end" && (
           <div class="sc-cover">
             <div class="sc-card">
-              <h2>{demo.outro?.title || "That's the tour"}</h2>
+              <h2>{demo.outro?.title || t.end}</h2>
               {demo.outro?.body && <p>{demo.outro.body}</p>}
               <div class="sc-card-actions">
                 {demo.outro?.ctaLabel &&
@@ -382,7 +386,7 @@ export function Player({
                     </a>
                   )}
                 <button type="button" class="sc-btn sc-btn-ghost sc-btn-lg" onClick={restart}>
-                  Replay
+                  {t.replay}
                 </button>
               </div>
             </div>
@@ -402,7 +406,7 @@ export function Player({
         <div class="sc-foot">
           <span class="sc-foot-title">{demo.title}</span>
           <a href={BRAND_URL} target="_blank" rel="noopener noreferrer">
-            Made with stepcast
+            {t.made}
           </a>
         </div>
       )}

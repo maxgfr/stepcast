@@ -95,7 +95,7 @@ describe("prompts", () => {
     const b = {
       ...DEFAULT_BRIEF,
       goal: "Show billing",
-      language: "French",
+      language: "fr",
       replacements: [{ from: "Globex", to: "Acme" }],
     };
     const text = demoInstructions(b);

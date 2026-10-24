@@ -279,6 +279,10 @@ select.input {
   margin-top: 3px;
   accent-color: var(--accent);
 }
+.lang-select {
+  flex: 1;
+  min-width: 0;
+}
 .replace {
   margin: 0 0 14px;
   padding: 0;

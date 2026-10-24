@@ -16,6 +16,7 @@ at the top-left corner, `x`/`y` being the box's top-left corner.
   "version": 1,
   "title": "Create your first invoice",
   "description": "From draft to sent in four clicks.",
+  "language": "en",
   "theme": { "accent": "#6d5efc" },
   "intro": { "title": "Invoices in a minute", "body": "Four clicks, no setup.", "button": "Start" },
   "outro": { "title": "That's it", "body": "", "ctaLabel": "Try it free", "ctaUrl": "https://example.com" },
@@ -39,6 +40,7 @@ at the top-left corner, `x`/`y` being the box's top-left corner.
 
 Fields:
 
+- `language`: ISO 639-1 code of the texts (`en`, `fr`, `es`, `de`, `it`, `pt`, `nl`, `ru`, `zh`, `ja`, `ko`, `ar`, `hi`, `tr`, `pl`, `sv`); the player's buttons follow it.
 - `steps[].image`: a key of `images`; `images` maps keys to `data:` URLs.
 - `action`: `click`, `type` (a field to fill) or `look` (nothing to click; `hotspot` null).
 - `hotspot`: the element the viewer clicks to go on; null to only look.

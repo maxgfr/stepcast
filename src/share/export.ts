@@ -48,9 +48,15 @@ async function playerAssets(): Promise<{ js: string; css: string }> {
   return { js: js as string, css: css as string };
 }
 
-export function standaloneHtml(title: string, bundle: string, js: string, css: string): string {
+export function standaloneHtml(
+  title: string,
+  bundle: string,
+  js: string,
+  css: string,
+  lang = "en",
+): string {
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(lang)}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -78,7 +84,7 @@ export async function exportHtml(demo: Demo, source: BlobSource): Promise<Blob> 
     encodeBundle(packed.demo, packed.blobs),
     playerAssets(),
   ]);
-  return new Blob([standaloneHtml(demo.title, bundle, assets.js, assets.css)], {
+  return new Blob([standaloneHtml(demo.title, bundle, assets.js, assets.css, demo.language)], {
     type: "text/html",
   });
 }
