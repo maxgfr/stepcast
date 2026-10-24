@@ -44,6 +44,19 @@ export const stepSchema = z.object({
   time: z.number().nullable().default(null).describe("Seconds into the recording"),
 });
 
+export const FRAME_WINDOWS = ["none", "macos"] as const;
+
+export const frameSchema = z.object({
+  background: z
+    .string()
+    .default("aurora")
+    .describe("A gradient name (aurora, ocean, sunset, mint, dusk, paper), a CSS color, or none"),
+  padding: z.number().default(0.06).describe("Space around the screenshot, 0–0.2 of the width"),
+  radius: z.number().default(0.012).describe("Corner radius, a fraction of the screenshot's width"),
+  shadow: z.boolean().default(true),
+  window: z.enum(FRAME_WINDOWS).default("none").describe("A window bar above the screenshot"),
+});
+
 export const demoSchema = z.object({
   version: z.literal(DEMO_VERSION).default(DEMO_VERSION),
   title: z.string().default("Untitled demo"),
@@ -52,7 +65,15 @@ export const demoSchema = z.object({
     .string()
     .default("en")
     .describe("ISO 639-1 code of the demo's language: its texts and the player's buttons"),
-  theme: z.object({ accent: z.string().default("#6d5efc") }).default({ accent: "#6d5efc" }),
+  theme: z
+    .object({
+      accent: z.string().default("#6d5efc"),
+      frame: frameSchema
+        .nullable()
+        .default(null)
+        .describe("Background and window around the screenshots, in the player and the videos"),
+    })
+    .prefault({}),
   intro: z
     .object({
       title: z.string(),
@@ -77,6 +98,7 @@ export const demoSchema = z.object({
 
 export type Demo = z.infer<typeof demoSchema>;
 export type Step = z.infer<typeof stepSchema>;
+export type Frame = z.infer<typeof frameSchema>;
 export type Redaction = Step["redactions"][number];
 export type TextEdit = Step["textEdits"][number];
 export type Action = (typeof ACTIONS)[number];

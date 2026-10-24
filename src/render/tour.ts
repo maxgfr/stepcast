@@ -8,6 +8,7 @@ import type { Box, Demo, Step } from "../model/demo";
 import { playerLabels } from "../player/i18n";
 import { autoPlacement } from "../player/Player";
 import { FULL_VIEW, lerpView, mapBox, type View, viewFor } from "./camera";
+import { drawFramed, type FrameMetrics, frameMetrics, innerRect } from "./frame";
 import { bakeToCanvas, blobToImage, makeCanvas } from "./image";
 
 export interface Shot {
@@ -21,10 +22,13 @@ export interface Tour {
   demo: Demo;
   shots: Shot[];
   duration: number;
-  /** Baked screenshot per step, drawn at the film's size. */
+  /** Baked screenshot per step, drawn at the scene's size. */
   images: HTMLCanvasElement[];
+  /** The film's size: the scene's, or the frame's around it. */
   width: number;
   height: number;
+  /** With a frame: its sizes, and the canvas the scene is drawn on before going into it. */
+  framed: { metrics: FrameMetrics; scene: HTMLCanvasElement } | null;
 }
 
 const MOVE = 0.8;
@@ -73,7 +77,21 @@ export async function prepareTour(
     images.push(c);
   }
   if (!width) throw new Error("This demo has no steps.");
-  return { demo, ...timeline(demo), images, width, height };
+  const frame = demo.theme.frame;
+  if (!frame) return { demo, ...timeline(demo), images, width, height, framed: null };
+  // The film is the frame: the scene keeps its size, the padding and the bar go around it.
+  const metrics = frameMetrics(frame, width / height);
+  const W = Math.round(width / (1 - 2 * metrics.pad)) & ~1;
+  const inner = innerRect(metrics, W);
+  const H = (inner.y + Math.round((height / width) * inner.w) + inner.x + 1) & ~1;
+  return {
+    demo,
+    ...timeline(demo),
+    images,
+    width: W,
+    height: H,
+    framed: { metrics, scene: makeCanvas(width, height) },
+  };
 }
 
 const center = (b: Box | null) =>
@@ -304,8 +322,29 @@ function shotAt(tour: Tour, t: number): Shot {
  * repeat exactly between transitions and a GIF can merge them.
  */
 export function frameAt(ctx: CanvasRenderingContext2D, tour: Tour, t: number, still = false): void {
+  const { framed } = tour;
+  const frame = tour.demo.theme.frame;
+  if (!framed || !frame) {
+    scene(ctx, tour, t, still, tour.width, tour.height);
+    return;
+  }
+  const sc = framed.scene.getContext("2d");
+  if (!sc) throw new Error("Canvas 2D is not available");
+  scene(sc, tour, t, still, framed.scene.width, framed.scene.height);
+  drawFramed(ctx, frame, framed.metrics, framed.scene, tour.width, tour.height);
+}
+
+/** The demo at `t` on a canvas of the scene's size, W × H. */
+function scene(
+  ctx: CanvasRenderingContext2D,
+  tour: Tour,
+  t: number,
+  still: boolean,
+  W: number,
+  H: number,
+): void {
   const words = playerLabels(tour.demo.language);
-  const { demo, width: W, height: H, images } = tour;
+  const { demo, images } = tour;
   const accent = demo.theme.accent || "#6d5efc";
   const shot = shotAt(tour, t);
   const local = t - shot.start;

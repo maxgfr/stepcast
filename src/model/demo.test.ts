@@ -8,6 +8,7 @@ describe("parseDemo", () => {
     if (!res.ok) return;
     expect(res.demo.title).toBe("Untitled demo");
     expect(res.demo.theme.accent).toBe("#6d5efc");
+    expect(res.demo.theme.frame).toBeNull();
     const step = res.demo.steps[0];
     expect(step?.id).not.toBe("");
     expect(step?.action).toBe("click");
@@ -30,6 +31,21 @@ describe("parseDemo", () => {
     expect(h?.x).toBeLessThanOrEqual(1 - (h?.w ?? 0));
     expect(h?.y).toBe(0);
     expect(res.demo.steps[0]?.zoom?.w).toBeGreaterThanOrEqual(0.05);
+  });
+
+  it("keeps an older theme and fills a frame's defaults", () => {
+    const old = parseDemo({ theme: { accent: "#ff0000" } });
+    if (!old.ok) throw new Error(old.error);
+    expect(old.demo.theme).toEqual({ accent: "#ff0000", frame: null });
+    const framed = parseDemo({ theme: { frame: { background: "ocean" } } });
+    if (!framed.ok) throw new Error(framed.error);
+    expect(framed.demo.theme.frame).toEqual({
+      background: "ocean",
+      padding: 0.06,
+      radius: 0.012,
+      shadow: true,
+      window: "none",
+    });
   });
 
   it("says where an invalid demo is wrong", () => {

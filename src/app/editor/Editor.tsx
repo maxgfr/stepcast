@@ -3,9 +3,18 @@ import { languageName, RESPONSE_LANGUAGES, toLanguageCode } from "llm-connect";
 import { useEffect, useRef } from "preact/hooks";
 import { clock } from "../../ai/prompts";
 import { frameOf, seek, videoDuration } from "../../capture/import";
-import { ACTIONS, newId, newStep, PLACEMENTS, REDACTION_STYLES, type Step } from "../../model/demo";
+import {
+  ACTIONS,
+  type Frame,
+  newId,
+  newStep,
+  PLACEMENTS,
+  REDACTION_STYLES,
+  type Step,
+} from "../../model/demo";
 import { getBlob } from "../../model/store";
 import { Player } from "../../player/Player";
+import { backgroundCss, FRAME_PRESETS } from "../../render/frame";
 import { AiPanel, brief } from "../AiPanel";
 import { navigate } from "../router";
 import { SharePanel } from "../SharePanel";
@@ -378,6 +387,89 @@ function DemoLanguage() {
   );
 }
 
+function DemoFrame() {
+  const d = project.value?.demo;
+  if (!d) return null;
+  const frame = d.theme.frame;
+  const setFrame = (next: Frame | null, tag = "frame") =>
+    updateDemo((x) => ({ ...x, theme: { ...x.theme, frame: next } }), tag);
+  return (
+    <Field
+      label="Frame"
+      hint="A background and a window around the screenshots, in the player and the videos."
+    >
+      <div class="frame-presets">
+        <button
+          type="button"
+          aria-pressed={!frame}
+          class={`frame-swatch frame-none ${frame ? "" : "is-active"}`}
+          title="None"
+          aria-label="None"
+          onClick={() => setFrame(null)}
+        ></button>
+        {FRAME_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            aria-pressed={frame?.background === p.frame.background}
+            class={`frame-swatch ${frame?.background === p.frame.background ? "is-active" : ""}`}
+            style={{ background: backgroundCss(p.frame.background) }}
+            title={p.label}
+            aria-label={p.label}
+            onClick={() => setFrame(frame ? { ...frame, background: p.frame.background } : p.frame)}
+          ></button>
+        ))}
+      </div>
+      {frame && (
+        <div class="frame-options">
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={frame.window === "macos"}
+              onChange={(e) =>
+                setFrame({ ...frame, window: e.currentTarget.checked ? "macos" : "none" })
+              }
+            />
+            Window bar
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={frame.shadow}
+              onChange={(e) => setFrame({ ...frame, shadow: e.currentTarget.checked })}
+            />
+            Shadow
+          </label>
+          <label class="frame-range">
+            Padding
+            <input
+              type="range"
+              min={0.02}
+              max={0.12}
+              step={0.01}
+              value={frame.padding}
+              onInput={(e) =>
+                setFrame({ ...frame, padding: Number(e.currentTarget.value) }, "fpad")
+              }
+            />
+          </label>
+          <label class="frame-range">
+            Corners
+            <input
+              type="range"
+              min={0}
+              max={0.03}
+              step={0.002}
+              value={frame.radius}
+              onInput={(e) => setFrame({ ...frame, radius: Number(e.currentTarget.value) }, "frad")}
+            />
+          </label>
+        </div>
+      )}
+    </Field>
+  );
+}
+
 function DemoInspector() {
   const d = project.value?.demo;
   if (!d) return null;
@@ -404,10 +496,11 @@ function DemoInspector() {
         <input
           type="color"
           value={d.theme.accent}
-          onInput={(e) => set({ theme: { accent: e.currentTarget.value } }, "accent")}
+          onInput={(e) => set({ theme: { ...d.theme, accent: e.currentTarget.value } }, "accent")}
         />{" "}
         Accent color
       </label>
+      <DemoFrame />
       <h3 class="sub">
         <label class="check">
           <input
