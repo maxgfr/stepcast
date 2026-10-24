@@ -1,20 +1,21 @@
 /**
  * The narration: what you said while recording, in a file of its own. It is
- * only there to help the AI write: it is transcribed (your provider's
- * speech-to-text model, or Whisper on this device) and what was said around
- * each screenshot goes to the AI with it. It is never played back.
+ * only there to help the AI write: it is transcribed (on this device by NVIDIA
+ * Parakeet or Canary, Whisper for other languages, or by your provider's
+ * speech-to-text model) and what was said around each screenshot goes to the
+ * AI with it. It is never played back.
  *
  * Speech about a screen comes mostly before the screenshot (taken just before
  * the click) and a little after: a frame gets what was said from just after
  * the previous frame to just after its own.
  */
 import { joinWords, type LlmSettings, type Transcript, transcriptionProblem } from "llm-connect";
-import type { WhisperPreset } from "llm-connect/whisper";
+import { nemoSupports, spokenLanguage } from "llm-connect/nemo";
 import type { Narration } from "../model/store";
-import type { WhisperReply, WhisperRequest } from "../workers/whisper";
+import type { DeviceEngine, SpeechReply, SpeechRequest } from "../workers/speech";
 import type { FrameNote } from "./prompts";
 
-declare const __WHISPER_WORKER_URL__: string;
+declare const __SPEECH_WORKER_URL__: string;
 
 /** Seconds of speech after a screenshot that still belong to it. */
 const LAG = 1.5;
@@ -64,29 +65,42 @@ export function gatherSaid<T extends FrameNote>(all: T[], chosen: T[]): T[] {
   });
 }
 
-export type TranscribeEngine = "provider" | "device";
+export type TranscribeEngine = "provider" | DeviceEngine;
 
-/** The provider when it can transcribe (a custom endpoint would need a model name), else the device. */
-export function defaultEngine(settings: LlmSettings | null): TranscribeEngine {
-  return settings && !settings.customEndpoint && !transcriptionProblem(settings)
-    ? "provider"
-    : "device";
+/**
+ * On this device: Parakeet when it knows the browser's language (it finds the spoken one by
+ * itself), else Whisper.
+ */
+export function defaultEngine(language = spokenLanguage()): DeviceEngine {
+  return nemoSupports("parakeet", language) ? "parakeet" : "whisper";
 }
+
+/** The provider can transcribe (a custom endpoint would need a model name). */
+export function providerCanTranscribe(settings: LlmSettings | null): boolean {
+  return !!settings && !settings.customEndpoint && !transcriptionProblem(settings);
+}
+
+const NAMES: Record<DeviceEngine, string> = {
+  parakeet: "NVIDIA Parakeet",
+  canary: "NVIDIA Canary",
+  whisper: "Whisper",
+};
 
 export interface TranscribeProgress {
   message: string;
   ratio?: number;
 }
 
-/** Whisper in a worker: resolves with the transcript, rejects on an error or an abort. */
-function whisperInWorker(
+/** A model on this device, in a worker: resolves with the transcript, rejects on an error or an abort. */
+function inWorker(
   samples: Float32Array,
-  preset: WhisperPreset,
+  engine: DeviceEngine,
   onProgress: (p: TranscribeProgress) => void,
   signal?: AbortSignal,
 ): Promise<Transcript> {
-  const url = typeof __WHISPER_WORKER_URL__ === "string" ? __WHISPER_WORKER_URL__ : "./whisper.js";
+  const url = typeof __SPEECH_WORKER_URL__ === "string" ? __SPEECH_WORKER_URL__ : "./speech.js";
   const worker = new Worker(url, { type: "module" });
+  const name = NAMES[engine];
   return new Promise<Transcript>((resolve, reject) => {
     const end = () => worker.terminate();
     signal?.addEventListener("abort", () => {
@@ -95,14 +109,16 @@ function whisperInWorker(
     });
     worker.onerror = (e) => {
       end();
-      reject(new Error(e.message || "Whisper could not start in this browser."));
+      reject(new Error(e.message || `${name} could not start in this browser.`));
     };
-    worker.onmessage = (e: MessageEvent<WhisperReply>) => {
+    worker.onmessage = (e: MessageEvent<SpeechReply>) => {
       const r = e.data;
       if (r.kind === "progress")
-        onProgress({ message: "Downloading Whisper (once, then cached)…", ratio: r.ratio });
+        onProgress({ message: `Downloading ${name} (once, then cached)…`, ratio: r.ratio });
       else if (r.kind === "loaded")
-        onProgress({ message: `Transcribing your narration on this device (${r.device})…` });
+        onProgress({ message: `Transcribing your narration on this device with ${name}…` });
+      else if (r.kind === "working")
+        onProgress({ message: `Transcribing your narration with ${name}…`, ratio: r.ratio });
       else if (r.kind === "done") {
         end();
         resolve(r.transcript);
@@ -111,17 +127,16 @@ function whisperInWorker(
         reject(new Error(r.message));
       }
     };
-    const request: WhisperRequest = { samples, preset };
+    const request: SpeechRequest = { samples, engine, language: spokenLanguage() };
     worker.postMessage(request, [samples.buffer]);
   });
 }
 
-/** Transcribes the narration's file with the provider, or with Whisper on this device. */
+/** Transcribes the narration's file on this device, or with the provider. */
 export async function transcribeNarration(
   blob: Blob,
   engine: TranscribeEngine,
   settings: LlmSettings | null,
-  preset: WhisperPreset,
   onProgress: (p: TranscribeProgress) => void,
   signal?: AbortSignal,
 ): Promise<Transcript> {
@@ -132,7 +147,6 @@ export async function transcribeNarration(
     return transcribe(settings, blob, signal ? { abortSignal: signal } : {});
   }
   onProgress({ message: "Reading your narration…" });
-  const { decodeAudio } = await import("llm-connect/whisper");
-  const samples = await decodeAudio(blob);
-  return whisperInWorker(samples, preset, onProgress, signal);
+  const { decodeAudio } = await import("llm-connect/nemo");
+  return inWorker(await decodeAudio(blob), engine, onProgress, signal);
 }

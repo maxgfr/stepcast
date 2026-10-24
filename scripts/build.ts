@@ -109,8 +109,8 @@ export async function build(opts: BuildOptions = {}): Promise<{ outdir: string; 
 
   // 1b. Whisper's worker (transcribing the narration on the device), and the one
   // onnxruntime build transformers.js loads (WebGPU and WebAssembly), served from here.
-  const whisper = await Bun.build({
-    entrypoints: [join(ROOT, "src/workers/whisper.ts")],
+  const speech = await Bun.build({
+    entrypoints: [join(ROOT, "src/workers/speech.ts")],
     outdir,
     minify,
     target: "browser",
@@ -118,10 +118,10 @@ export async function build(opts: BuildOptions = {}): Promise<{ outdir: string; 
     naming: { entry: "assets/[name]-[hash].[ext]", chunk: "assets/[name]-[hash].[ext]" },
     define: env,
   });
-  assertOk(whisper, "whisper worker build");
-  const whisperOut =
-    whisper.outputs.find((o) => o.kind === "entry-point") ?? fail("no whisper worker output");
-  const whisperUrl = `./${relative(outdir, whisperOut.path).split("\\").join("/")}`;
+  assertOk(speech, "speech worker build");
+  const speechOut =
+    speech.outputs.find((o) => o.kind === "entry-point") ?? fail("no speech worker output");
+  const speechUrl = `./${relative(outdir, speechOut.path).split("\\").join("/")}`;
   const transformers = dirname(Bun.resolveSync("@huggingface/transformers/package.json", ROOT));
   const ort = join(dirname(Bun.resolveSync("onnxruntime-web/package.json", transformers)), "dist");
   await mkdir(join(outdir, "ort"), { recursive: true });
@@ -144,7 +144,7 @@ export async function build(opts: BuildOptions = {}): Promise<{ outdir: string; 
     define: {
       ...env,
       __CLOCK_WORKER_URL__: JSON.stringify(workerUrl),
-      __WHISPER_WORKER_URL__: JSON.stringify(whisperUrl),
+      __SPEECH_WORKER_URL__: JSON.stringify(speechUrl),
     },
   });
   assertOk(app, "app build");

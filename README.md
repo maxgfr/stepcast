@@ -68,10 +68,12 @@ stepcast file** to review, polish and share it.
 - The page's Content-Security-Policy allows no inline script, no eval and no third-party script.
   It can connect only to `https:` APIs (your AI provider, the model catalog, GitHub when you
   publish a Gist) and to local model servers.
-- Your narration is transcribed by your provider's speech-to-text model (OpenAI, Gemini,
-  Mistral, Groq) or by Whisper on this device (WebGPU or WebAssembly, downloaded once), as you
-  choose. It only helps the AI write: what you said around each screenshot goes with it. The voice
-  is never played back or shared.
+- Your narration is transcribed on this device by NVIDIA Parakeet (25 European languages,
+  downloaded once and shared with takeone), NVIDIA Canary (lighter) or Whisper (other languages),
+  or by your provider's speech-to-text model (OpenAI, Gemini, Mistral, Groq), as you choose. It
+  only helps the AI write: what you said around each screenshot goes with it. The voice is never
+  played back or shared. A service worker (`sw.js`) only adds the headers that isolate the page,
+  so the model runs on several threads; it caches nothing.
 - Recordings and screenshots never leave the device, except the screenshots you send to the AI
   provider you chose, and what you choose to share.
 - Blurs and text replacements are baked into the images of every share link, Gist and export.
