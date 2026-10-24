@@ -3,8 +3,10 @@
  * an MP4 (WebCodecs through mediabunny, WebM when H.264 cannot be encoded) and
  * a GIF (gifenc), plus the embed snippet.
  */
+
+import { toWebVtt } from "llm-connect";
 import type { Demo } from "../model/demo";
-import { frameAt, prepareTour } from "../render/tour";
+import { frameAt, prepareTour, subtitleCues, type TourOptions } from "../render/tour";
 import { encodeBundle } from "./bundle";
 import { appUrl, type BlobSource, packDemo } from "./pack";
 
@@ -107,6 +109,11 @@ export async function exportJson(demo: Demo, source: BlobSource): Promise<Blob> 
   return new Blob([JSON.stringify({ ...demo, images }, null, 2)], { type: "application/json" });
 }
 
+/** The steps' texts as WebVTT subtitles, timed like the MP4 export. */
+export function exportVtt(demo: Demo): Blob {
+  return new Blob([toWebVtt({ segments: subtitleCues(demo) })], { type: "text/vtt" });
+}
+
 export function embedSnippet(link: string, title: string): string {
   const src = link.replace("#/play/", "#/embed/").replace("#/gist/", "#/embed/gist/");
   return `<iframe src="${escapeHtml(src)}" title="${escapeHtml(title)}" style="width:100%;aspect-ratio:16/10;border:0;border-radius:12px" allow="fullscreen" loading="lazy"></iframe>`;
@@ -127,6 +134,7 @@ export async function exportVideo(
   source: BlobSource,
   onProgress: Progress,
   signal?: AbortSignal,
+  options: TourOptions = {},
 ): Promise<Blob> {
   const {
     BufferTarget,
@@ -139,7 +147,7 @@ export async function exportVideo(
   } = await import("mediabunny");
   if (typeof VideoEncoder === "undefined")
     throw new Error("This browser cannot encode video (no WebCodecs).");
-  const tour = await prepareTour(demo, source, 1920);
+  const tour = await prepareTour(demo, source, 1920, options);
   const canvas = document.createElement("canvas");
   canvas.width = tour.width;
   canvas.height = tour.height;
@@ -186,9 +194,10 @@ export async function exportGif(
   source: BlobSource,
   onProgress: Progress,
   signal?: AbortSignal,
+  options: TourOptions = {},
 ): Promise<Blob> {
   const { GIFEncoder, applyPalette, quantize } = await import("gifenc");
-  const tour = await prepareTour(demo, source, 880);
+  const tour = await prepareTour(demo, source, 880, options);
   const canvas = document.createElement("canvas");
   canvas.width = tour.width;
   canvas.height = tour.height;

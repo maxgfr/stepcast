@@ -185,6 +185,13 @@ test("AI mode: record, generate with a model, share a link, export HTML", async 
   expect(html).toContain('<html lang="fr">');
   await offline.getByRole("button", { name: "Commencer" }).click();
   await expect(offline.getByText("Click the shape")).toBeVisible();
+
+  // Subtitles, timed like the video
+  const vtt = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Subtitles (.vtt)" }).click();
+  const cues = await readFile(await (await vtt).path(), "utf8");
+  expect(cues.startsWith("WEBVTT")).toBe(true);
+  expect(cues).toContain("Click the shape");
   expect(errors).toEqual([]);
 });
 

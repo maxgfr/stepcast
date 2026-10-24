@@ -1596,8 +1596,13 @@ progress {
 }
 .export-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
+  margin-bottom: 10px;
+}
+.video-text {
+  align-items: center;
+  gap: 10px;
   margin-bottom: 10px;
 }
 .busy {
