@@ -236,40 +236,6 @@ export function Player({
     if (phase === "step") onStepChange?.(index);
   }, [index, phase]);
 
-  // The narration: each step plays its part of the recorded voice, while the voice is on.
-  const voiceUrl = demo.narration ? (demo.images[demo.narration] ?? "") : "";
-  const hasVoice = !!voiceUrl && steps.some((s) => s.voice);
-  const [voiceOn, setVoiceOn] = useState(true);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  useEffect(() => {
-    if (!hasVoice) return;
-    const a = new Audio(voiceUrl);
-    a.preload = "auto";
-    audio.current = a;
-    return () => {
-      a.pause();
-      audio.current = null;
-    };
-  }, [voiceUrl, hasVoice]);
-  useEffect(() => {
-    const a = audio.current;
-    if (!a) return;
-    a.pause();
-    const voice = phase === "step" ? step?.voice : null;
-    if (!voiceOn || !voice) return;
-    const stopAtEnd = () => {
-      if (a.currentTime >= voice.end) a.pause();
-    };
-    a.addEventListener("timeupdate", stopAtEnd);
-    a.currentTime = voice.start;
-    // Browsers refuse sound before the viewer's first click; the next step will play.
-    void a.play().catch(() => undefined);
-    return () => {
-      a.removeEventListener("timeupdate", stopAtEnd);
-      a.pause();
-    };
-  }, [index, phase, voiceOn, step?.voice, hasVoice]);
-
   // Preload the next screenshot.
   useEffect(() => {
     const next = steps[index + 1];
@@ -477,25 +443,6 @@ export function Player({
             </div>
           )}
 
-          {hasVoice && (
-            <button
-              type="button"
-              class={`sc-voice${voiceOn ? " is-on" : ""}`}
-              aria-pressed={voiceOn}
-              aria-label={voiceOn ? t.voiceOff : t.voiceOn}
-              title={voiceOn ? t.voiceOff : t.voiceOn}
-              onClick={() => setVoiceOn((v) => !v)}
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path d="M4 9h4l5-4v14l-5-4H4z" />
-                {voiceOn ? (
-                  <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
-                ) : (
-                  <path d="M17 9l5 6M22 9l-5 6" />
-                )}
-              </svg>
-            </button>
-          )}
           <div class="sc-progress" aria-hidden="true">
             <div
               class="sc-progress-bar"

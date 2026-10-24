@@ -12,7 +12,6 @@ import {
   saidPerFrame,
   type TranscribeEngine,
   transcribeNarration,
-  withVoices,
 } from "../ai/narration";
 import { type Brief, clock, DEFAULT_BRIEF, type FrameNote, pastePrompt } from "../ai/prompts";
 import { parseDemoAnswer, stepsFromAnswer } from "../ai/schema";
@@ -167,8 +166,8 @@ function NarrationField() {
       label="Your narration"
       hint={
         n.transcript
-          ? `${clock(n.duration)} transcribed: ${words} word${words === 1 ? "" : "s"}. The AI writes the steps from them, and each step plays its part.`
-          : `${clock(n.duration)} recorded. It is transcribed before the demo is written; each step then plays its part.`
+          ? `${clock(n.duration)} transcribed: ${words} word${words === 1 ? "" : "s"}. The AI writes the steps from them.`
+          : `${clock(n.duration)} recorded. It is transcribed before the demo is written, to help the AI write the steps.`
       }
     >
       <div class="row">
@@ -207,8 +206,7 @@ async function applyResult(
   },
   keep: boolean,
 ) {
-  const voiced = withVoices(steps, project.value?.narration);
-  const colored = await Promise.all(voiced.map((s) => matchEditColors(s, assetUrl(s.image))));
+  const colored = await Promise.all(steps.map((s) => matchEditColors(s, assetUrl(s.image))));
   updateDemo((d): Demo => {
     const untitled = !d.title || d.title === "Untitled demo";
     return {

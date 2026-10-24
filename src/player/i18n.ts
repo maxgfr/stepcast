@@ -14,9 +14,6 @@ export interface PlayerLabels {
   /** Accessible name of a hotspot: "Next: <step title>". */
   nextStep: string;
   made: string;
-  /** The voice button, when the demo has a narration. */
-  voiceOn: string;
-  voiceOff: string;
 }
 
 const LABELS: Record<string, PlayerLabels> = {
@@ -29,8 +26,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "That's the tour",
     nextStep: "Next step",
     made: "Made with stepcast",
-    voiceOn: "Turn on the voice",
-    voiceOff: "Turn off the voice",
   },
   fr: {
     start: "Commencer",
@@ -41,8 +36,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "C'est la fin de la visite",
     nextStep: "Étape suivante",
     made: "Fait avec stepcast",
-    voiceOn: "Activer la voix",
-    voiceOff: "Couper la voix",
   },
   es: {
     start: "Empezar",
@@ -53,8 +46,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Fin del recorrido",
     nextStep: "Paso siguiente",
     made: "Hecho con stepcast",
-    voiceOn: "Activar la voz",
-    voiceOff: "Silenciar la voz",
   },
   de: {
     start: "Starten",
@@ -65,8 +56,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Das war die Tour",
     nextStep: "Nächster Schritt",
     made: "Erstellt mit stepcast",
-    voiceOn: "Stimme einschalten",
-    voiceOff: "Stimme ausschalten",
   },
   it: {
     start: "Inizia",
@@ -77,8 +66,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Fine del tour",
     nextStep: "Passo successivo",
     made: "Creato con stepcast",
-    voiceOn: "Attiva la voce",
-    voiceOff: "Disattiva la voce",
   },
   pt: {
     start: "Começar",
@@ -89,8 +76,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Fim da visita",
     nextStep: "Próximo passo",
     made: "Feito com stepcast",
-    voiceOn: "Ativar a voz",
-    voiceOff: "Desativar a voz",
   },
   nl: {
     start: "Starten",
@@ -101,8 +86,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Dat was de rondleiding",
     nextStep: "Volgende stap",
     made: "Gemaakt met stepcast",
-    voiceOn: "Stem aanzetten",
-    voiceOff: "Stem uitzetten",
   },
   ru: {
     start: "Начать",
@@ -113,8 +96,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Обзор завершён",
     nextStep: "Следующий шаг",
     made: "Сделано в stepcast",
-    voiceOn: "Включить голос",
-    voiceOff: "Выключить голос",
   },
   zh: {
     start: "开始",
@@ -125,8 +106,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "演示结束",
     nextStep: "下一步",
     made: "由 stepcast 制作",
-    voiceOn: "开启语音",
-    voiceOff: "关闭语音",
   },
   ja: {
     start: "開始",
@@ -137,8 +116,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "ツアーは以上です",
     nextStep: "次のステップ",
     made: "stepcast で作成",
-    voiceOn: "音声をオン",
-    voiceOff: "音声をオフ",
   },
   ko: {
     start: "시작",
@@ -149,8 +126,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "투어가 끝났습니다",
     nextStep: "다음 단계",
     made: "stepcast로 제작",
-    voiceOn: "음성 켜기",
-    voiceOff: "음성 끄기",
   },
   ar: {
     start: "ابدأ",
@@ -161,8 +136,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "انتهت الجولة",
     nextStep: "الخطوة التالية",
     made: "صُنع باستخدام stepcast",
-    voiceOn: "تشغيل الصوت",
-    voiceOff: "إيقاف الصوت",
   },
   hi: {
     start: "शुरू करें",
@@ -173,8 +146,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "टूर समाप्त",
     nextStep: "अगला चरण",
     made: "stepcast से बनाया गया",
-    voiceOn: "आवाज़ चालू करें",
-    voiceOff: "आवाज़ बंद करें",
   },
   tr: {
     start: "Başla",
@@ -185,8 +156,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Tur bitti",
     nextStep: "Sonraki adım",
     made: "stepcast ile yapıldı",
-    voiceOn: "Sesi aç",
-    voiceOff: "Sesi kapat",
   },
   pl: {
     start: "Rozpocznij",
@@ -197,8 +166,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "To koniec prezentacji",
     nextStep: "Następny krok",
     made: "Stworzone w stepcast",
-    voiceOn: "Włącz głos",
-    voiceOff: "Wyłącz głos",
   },
   sv: {
     start: "Starta",
@@ -209,8 +176,6 @@ const LABELS: Record<string, PlayerLabels> = {
     end: "Det var rundturen",
     nextStep: "Nästa steg",
     made: "Skapad med stepcast",
-    voiceOn: "Slå på rösten",
-    voiceOff: "Stäng av rösten",
   },
 };
 

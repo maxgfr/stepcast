@@ -8,7 +8,6 @@ import { toWebVtt } from "llm-connect";
 import type { Demo } from "../model/demo";
 import { type BubbleOptions, cameraTime, drawBubble, openCamera } from "../render/bubble";
 import { frameAt, prepareTour, subtitleCues, type Tour, type TourOptions } from "../render/tour";
-import { voiceTrack } from "../render/voice";
 import { encodeBundle } from "./bundle";
 import { appUrl, type BlobSource, packDemo } from "./pack";
 
@@ -96,7 +95,7 @@ export async function exportHtml(demo: Demo, source: BlobSource): Promise<Blob> 
 /** The project as JSON, screenshots inlined as data: URLs (not baked: it stays editable). */
 export async function exportJson(demo: Demo, source: BlobSource): Promise<Blob> {
   const images: Record<string, string> = {};
-  const keys = [...demo.steps.map((s) => s.image), ...(demo.narration ? [demo.narration] : [])];
+  const keys = demo.steps.map((s) => s.image);
   for (const key of keys) {
     if (images[key]) continue;
     const blob = await source(key);
@@ -170,16 +169,13 @@ export async function exportVideo(
   options: VideoOptions = {},
 ): Promise<Blob> {
   const {
-    AudioBufferSource,
     BufferTarget,
     CanvasSource,
     Mp4OutputFormat,
     Output,
     QUALITY_HIGH,
-    QUALITY_MEDIUM,
     WebMOutputFormat,
     canEncodeVideo,
-    getFirstEncodableAudioCodec,
   } = await import("mediabunny");
   if (typeof VideoEncoder === "undefined")
     throw new Error("This browser cannot encode video (no WebCodecs).");
@@ -198,19 +194,7 @@ export async function exportVideo(
   });
   const video = new CanvasSource(canvas, { codec, quality: QUALITY_HIGH });
   output.addVideoTrack(video, { frameRate: 30 });
-  // The narration's parts, laid on the film.
-  const narration = options.voice !== false && demo.narration ? await source(demo.narration) : null;
-  const soundtrack = narration ? await voiceTrack(tour, narration) : null;
-  const audioCodec = soundtrack
-    ? await getFirstEncodableAudioCodec(mp4 ? ["aac", "opus"] : ["opus"])
-    : null;
-  const audio =
-    soundtrack && audioCodec
-      ? new AudioBufferSource({ codec: audioCodec, bitrate: QUALITY_MEDIUM })
-      : null;
-  if (audio) output.addAudioTrack(audio);
   await output.start();
-  if (audio && soundtrack) await audio.add(soundtrack);
   const fps = 30;
   const total = Math.ceil(tour.duration * fps);
   const bubble = await bubbles(tour, fps, total, options.camera);
@@ -252,7 +236,7 @@ export async function exportGif(
 ): Promise<Blob> {
   const { GIFEncoder, applyPalette, quantize } = await import("gifenc");
   // A GIF has no sound: its shots keep the length of their texts.
-  const tour = await prepareTour(demo, source, 880, { ...options, voice: false });
+  const tour = await prepareTour(demo, source, 880, options);
   const canvas = document.createElement("canvas");
   canvas.width = tour.width;
   canvas.height = tour.height;
