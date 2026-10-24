@@ -377,7 +377,7 @@ function cursor(ctx: CanvasRenderingContext2D, x: number, y: number, size: numbe
   ctx.restore();
 }
 
-function shotAt(tour: Tour, t: number): Shot {
+export function shotAt(tour: Tour, t: number): Shot {
   for (const s of tour.shots) if (t < s.start + s.duration) return s;
   return tour.shots[tour.shots.length - 1] as Shot;
 }

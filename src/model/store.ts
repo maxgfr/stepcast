@@ -19,6 +19,13 @@ export interface Frame {
   height: number;
 }
 
+/** A file recorded next to the screen: its blob key, and where it starts on the recording's clock. */
+export interface SideFile {
+  key: string;
+  /** Seconds into the screen recording at which the file starts. */
+  offset: number;
+}
+
 export interface Project {
   id: string;
   /** The demo; `step.image` is a blob key, `demo.images` stays empty here. */
@@ -26,6 +33,8 @@ export interface Project {
   frames: Frame[];
   /** Blob key of the recording, when there is one. */
   recording: string | null;
+  /** The camera, recorded next to the screen (projects made before it have none). */
+  camera?: SideFile | null;
   createdAt: number;
   updatedAt: number;
 }

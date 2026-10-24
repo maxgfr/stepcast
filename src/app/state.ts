@@ -4,6 +4,7 @@
  */
 import { batch, computed, signal } from "@preact/signals";
 import type { CapturedFrame } from "../capture/recorder";
+import type { SideTake } from "../capture/side";
 import { type Demo, emptyDemo, newId, newStep, type Step } from "../model/demo";
 import {
   type Frame,
@@ -11,6 +12,7 @@ import {
   getProject,
   type Project,
   putBlob,
+  type SideFile,
   saveProject,
 } from "../model/store";
 
@@ -77,6 +79,7 @@ export async function createProject(
   frames: CapturedFrame[],
   recording: Blob | null,
   asSteps = false,
+  sides: { camera?: SideTake | null } = {},
 ): Promise<string> {
   const id = newId("p");
   const stored: Frame[] = [];
@@ -98,10 +101,23 @@ export async function createProject(
     rec = "recording";
     await putBlob(id, rec, recording);
   }
+  let camera: SideFile | null = null;
+  if (sides.camera) {
+    camera = { key: "camera", offset: sides.camera.offset };
+    await putBlob(id, camera.key, sides.camera.blob);
+  }
   const demo = emptyDemo(title);
   if (asSteps) demo.steps = stored.map((f) => newStep(f.asset, { time: f.time }));
   const now = Date.now();
-  await saveProject({ id, demo, frames: stored, recording: rec, createdAt: now, updatedAt: now });
+  await saveProject({
+    id,
+    demo,
+    frames: stored,
+    recording: rec,
+    camera,
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 

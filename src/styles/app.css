@@ -843,6 +843,16 @@ progress {
   gap: 10px;
   flex-wrap: wrap;
 }
+.cam-preview {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  box-shadow:
+    0 0 0 3px var(--surface),
+    var(--shadow);
+}
 .shots {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1773,4 +1783,8 @@ body:has(.play-embed) {
 }
 .frame-range input {
   accent-color: var(--accent);
+}
+.corner-select {
+  width: auto;
+  min-width: 150px;
 }
