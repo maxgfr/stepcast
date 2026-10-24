@@ -253,8 +253,8 @@ export function Record() {
               checked={withMic.value}
               onChange={(e) => (withMic.value = e.currentTarget.checked)}
             />
-            Narrate with my microphone: the AI writes the steps from what you say, and the demo can
-            play your voice
+            Narrate with my microphone: the AI writes the steps from what you say (only the words
+            are used, the voice is not played back)
           </label>
           <label class="check">
             <input

@@ -50,7 +50,6 @@ Fields:
 - `highlights`: regions kept bright while the rest is dimmed.
 - `redactions`: regions blurred (`blur`), pixelated (`pixelate`) or covered (`solid`). They are painted into the pixels when the demo is shared or exported.
 - `textEdits`: text painted over the screenshot, replacing what it showed.
-- `narration`: null, or a key of `images` holding the recorded voice (an audio `data:` URL); each step's `voice` (`{ "start", "end" }`, seconds into that audio, or null) is played over it.
 - Missing fields get defaults; out-of-range boxes are clamped.
 
 ## Making a demo as an agent

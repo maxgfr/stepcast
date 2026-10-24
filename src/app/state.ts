@@ -33,7 +33,6 @@ export function assetUrl(key: string): string {
 
 async function loadAssets(p: Project): Promise<void> {
   const keys = new Set([...p.frames.map((f) => f.asset), ...p.demo.steps.map((s) => s.image)]);
-  if (p.demo.narration) keys.add(p.demo.narration);
   for (const key of keys) {
     if (urls.has(key)) continue;
     const blob = await getBlob(p.id, key);
@@ -120,7 +119,6 @@ export async function createProject(
     await putBlob(id, narration.key, sides.narration.blob);
   }
   const demo = emptyDemo(title);
-  if (narration) demo.narration = narration.key;
   if (asSteps) demo.steps = stored.map((f) => newStep(f.asset, { time: f.time }));
   const now = Date.now();
   await saveProject({
@@ -260,7 +258,6 @@ export const playableDemo = computed<Demo | null>(() => {
   void assetVersion.value;
   const images: Record<string, string> = {};
   for (const s of p.demo.steps) images[s.image] = urls.get(s.image) ?? "";
-  if (p.demo.narration) images[p.demo.narration] = urls.get(p.demo.narration) ?? "";
   return { ...p.demo, images };
 });
 
@@ -273,11 +270,11 @@ export async function createProjectFromDemo(
   const frames: Frame[] = [];
   const keyMap = new Map<string, string>();
   for (const [key, blob] of Object.entries(blobs)) {
+    // Only screenshots (older files may also carry a recorded voice).
+    if (!blob.type.startsWith("image/")) continue;
     const asset = newId("a");
     keyMap.set(key, asset);
     await putBlob(id, asset, blob);
-    // The narration is kept, but it is no screenshot.
-    if (key === demo.narration) continue;
     const step = demo.steps.find((s) => s.image === key);
     frames.push({
       id: newId("f"),
@@ -295,12 +292,7 @@ export async function createProjectFromDemo(
   const now = Date.now();
   await saveProject({
     id,
-    demo: {
-      ...demo,
-      steps,
-      narration: demo.narration ? (keyMap.get(demo.narration) ?? null) : null,
-      images: {},
-    },
+    demo: { ...demo, steps, images: {} },
     frames,
     recording: null,
     createdAt: now,

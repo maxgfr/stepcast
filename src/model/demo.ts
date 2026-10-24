@@ -42,11 +42,6 @@ export const stepSchema = z.object({
   highlights: z.array(boxSchema).default([]),
   textEdits: z.array(textEditSchema).default([]),
   time: z.number().nullable().default(null).describe("Seconds into the recording"),
-  voice: z
-    .object({ start: z.number(), end: z.number() })
-    .nullable()
-    .default(null)
-    .describe("The part of the narration (seconds into its file) spoken over this step"),
 });
 
 export const FRAME_WINDOWS = ["none", "macos"] as const;
@@ -97,12 +92,7 @@ export const demoSchema = z.object({
     .nullable()
     .default(null),
   steps: z.array(stepSchema).default([]),
-  narration: z
-    .string()
-    .nullable()
-    .default(null)
-    .describe("Key of `images` holding the recorded voice (audio), which steps' `voice` play"),
-  /** Media key → URL: a data: URL in a shared file, a blob: URL inside the app. */
+  /** Image key → URL: a data: URL in a shared file, a blob: URL inside the app. */
   images: z.record(z.string(), z.string()).default({}),
 });
 
@@ -132,13 +122,8 @@ export function newId(prefix = "s"): string {
 }
 
 function normalizeStep(step: Step): Step {
-  const v = step.voice;
   return {
     ...step,
-    voice:
-      v && Number.isFinite(v.start) && Number.isFinite(v.end) && v.end > v.start
-        ? { start: Math.max(0, v.start), end: v.end }
-        : null,
     id: step.id || newId(),
     hotspot: step.hotspot ? clampBox(step.hotspot) : null,
     zoom: step.zoom ? clampBox(step.zoom, 0.05) : null,

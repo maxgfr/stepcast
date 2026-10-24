@@ -274,41 +274,6 @@
   flex-wrap: wrap;
 }
 
-.sc-voice {
-  position: absolute;
-  top: 10px;
-  inset-inline-end: 10px;
-  z-index: 5;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(14, 12, 24, 0.62);
-  color: #fff;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-}
-.sc-voice svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.sc-voice path:first-child {
-  fill: currentColor;
-}
-.sc-voice.is-on {
-  background: var(--sc-accent);
-}
-.sc-voice:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
-}
-
 .sc-progress {
   position: absolute;
   left: 0;

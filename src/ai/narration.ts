@@ -1,16 +1,15 @@
 /**
  * The narration: what you said while recording, in a file of its own. It is
- * transcribed (your provider's speech-to-text model, or Whisper on this
- * device), then cut along the recording's clock: what was said around each
- * screenshot goes to the AI, and each step keeps the part spoken over it.
+ * only there to help the AI write: it is transcribed (your provider's
+ * speech-to-text model, or Whisper on this device) and what was said around
+ * each screenshot goes to the AI with it. It is never played back.
  *
  * Speech about a screen comes mostly before the screenshot (taken just before
- * the click) and a little after: a step's part runs from just after the
- * previous step to just after its own.
+ * the click) and a little after: a frame gets what was said from just after
+ * the previous frame to just after its own.
  */
 import { joinWords, type LlmSettings, type Transcript, transcriptionProblem } from "llm-connect";
 import type { WhisperPreset } from "llm-connect/whisper";
-import type { Step } from "../model/demo";
 import type { Narration } from "../model/store";
 import type { WhisperReply, WhisperRequest } from "../workers/whisper";
 import type { FrameNote } from "./prompts";
@@ -38,41 +37,6 @@ export function saidPerFrame(n: Narration, times: (number | null)[]): string[] {
     const said = saidBetween(n, prev, last ? Number.POSITIVE_INFINITY : t + LAG);
     prev = t + LAG;
     return said;
-  });
-}
-
-/**
- * Each step's part of the narration, in seconds into its file: the words spoken from just after
- * the previous step (by recording time) to just after this one, the last step keeping the rest.
- * Without a transcript, the same window is cut from the file as is.
- */
-export function withVoices(steps: Step[], n: Narration | null | undefined): Step[] {
-  if (!n) return steps;
-  const times = [...new Set(steps.flatMap((s) => (s.time === null ? [] : [s.time])))].sort(
-    (a, b) => a - b,
-  );
-  const lastTime = times[times.length - 1];
-  return steps.map((s) => {
-    if (s.time === null) return { ...s, voice: null };
-    const i = times.indexOf(s.time);
-    const from = i > 0 ? (times[i - 1] as number) + LAG : Number.NEGATIVE_INFINITY;
-    const to = s.time === lastTime ? Number.POSITIVE_INFINITY : s.time + LAG;
-    if (n.transcript) {
-      const words = n.transcript.words.filter((w) => {
-        const t = w.start + n.offset;
-        return t > from && t <= to;
-      });
-      const first = words[0];
-      const last = words[words.length - 1];
-      return {
-        ...s,
-        voice:
-          first && last ? { start: Math.max(0, first.start - 0.1), end: last.end + 0.2 } : null,
-      };
-    }
-    const start = Math.max(0, from - n.offset);
-    const end = Math.min(n.duration, to - n.offset);
-    return { ...s, voice: end - start > 0.4 ? { start, end } : null };
   });
 }
 

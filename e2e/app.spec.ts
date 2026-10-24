@@ -352,33 +352,25 @@ test("the camera recorded next to the screen becomes a bubble in the MP4", async
   expect(Math.min(...corner.ring)).toBeGreaterThan(200);
 });
 
-test("a narration plays over each step, in the player, the HTML file and the MP4", async ({
-  page,
-  context,
-}) => {
+test("a narration is kept for the AI to read, and never played back", async ({ page, context }) => {
   await context.grantPermissions(["microphone"]);
   await record(page, 2, { mic: true, pause: 1500 });
   await page.getByRole("button", { name: /Manual mode/ }).click();
   await expect(page.locator(".step-item")).toHaveCount(2);
+  // The player has no voice
   await page.getByRole("button", { name: "Preview" }).click();
-  const voice = page.locator("dialog .sc-voice");
-  await expect(voice).toBeVisible();
-  await expect(voice).toHaveAttribute("aria-pressed", "true");
-  await voice.click();
-  await expect(voice).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("dialog .sc-hotspot, dialog .sc-tip").first()).toBeVisible();
+  await expect(page.locator("dialog .sc-voice")).toHaveCount(0);
   await page.keyboard.press("Escape");
-
+  // The AI panel offers to transcribe it, to write the steps from it
+  await page.getByRole("button", { name: "AI", exact: true }).click();
+  await expect(page.getByText("Your narration")).toBeVisible();
+  await expect(page.getByLabel("Transcribe with")).toBeVisible();
+  await page.keyboard.press("Escape");
+  // And the MP4 has no sound
   await page.getByRole("button", { name: "Share" }).click();
-  const html = page.waitForEvent("download");
-  await page.getByRole("button", { name: "HTML player" }).click();
-  const offline = await context.newPage();
-  await offline.setContent(await readFile(await (await html).path(), "utf8"));
-  await expect(offline.locator(".sc-voice")).toBeVisible();
-
-  await expect(page.getByLabel(/Your voice in the MP4/)).toBeChecked();
   const mp4 = page.waitForEvent("download", { timeout: 60_000 });
   await page.getByRole("button", { name: "MP4 video" }).click();
   const bytes = await readFile(await (await mp4).path());
-  // An audio track: AAC ("mp4a") or Opus, next to the video
-  expect(bytes.includes("mp4a") || bytes.includes("Opus")).toBe(true);
+  expect(bytes.includes("mp4a") || bytes.includes("Opus")).toBe(false);
 });

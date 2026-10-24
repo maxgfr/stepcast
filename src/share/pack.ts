@@ -25,7 +25,6 @@ export async function packDemo(
   source: BlobSource,
   maxSide = 1600,
   quality = 0.82,
-  voice = true,
 ): Promise<Packed> {
   const blobs: Record<string, Blob> = {};
   const keys = new Map<string, string>();
@@ -43,19 +42,7 @@ export async function packDemo(
     }
     steps.push({ ...step, image: key, redactions: [], textEdits: [] });
   }
-  // The narration goes along when a step plays it (and the caller wants it).
-  const audio =
-    voice && demo.narration && steps.some((s) => s.voice) ? await source(demo.narration) : null;
-  if (audio) blobs.voice = audio;
-  return {
-    demo: {
-      ...demo,
-      steps: audio ? steps : steps.map((s) => ({ ...s, voice: null })),
-      narration: audio ? "voice" : null,
-      images: {},
-    },
-    blobs,
-  };
+  return { demo: { ...demo, steps, images: {} }, blobs };
 }
 
 /** Longest bundle a share link carries; browsers accept 2 MB URLs, chat apps far less. */
@@ -73,16 +60,13 @@ export async function bundleForLink(
   demo: Demo,
   source: BlobSource,
   limit = LINK_LIMIT,
-): Promise<{ bundle: string; fits: boolean; side: number; voice: boolean }> {
-  let last = { bundle: "", fits: false, side: 0, voice: false };
-  // With the narration first; without it when no resolution makes it fit.
-  for (const voice of demo.narration ? [true, false] : [false]) {
-    for (const [side, q] of LADDER) {
-      const packed = await packDemo(demo, source, side, q, voice);
-      const bundle = await encodeBundle(packed.demo, packed.blobs);
-      last = { bundle, fits: bundle.length <= limit, side, voice: !!packed.demo.narration };
-      if (last.fits) return last;
-    }
+): Promise<{ bundle: string; fits: boolean; side: number }> {
+  let last = { bundle: "", fits: false, side: 0 };
+  for (const [side, q] of LADDER) {
+    const packed = await packDemo(demo, source, side, q);
+    const bundle = await encodeBundle(packed.demo, packed.blobs);
+    last = { bundle, fits: bundle.length <= limit, side };
+    if (last.fits) return last;
   }
   return last;
 }
