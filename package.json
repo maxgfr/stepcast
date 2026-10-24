@@ -1,0 +1,39 @@
+{
+  "name": "stepcast",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Record your screen, let AI turn it into an interactive, click-through product demo. Frontend only, hosted on GitHub Pages.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "bun scripts/dev.ts",
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "bun test src scripts",
+    "test:e2e": "bun run build && playwright test",
+    "catalog": "llm-models catalog --npm callable --require openai,anthropic,google,mistral --out public/models.json"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.87",
+    "@ai-sdk/google": "4.0.104",
+    "@ai-sdk/mistral": "4.0.71",
+    "@ai-sdk/openai": "4.0.101",
+    "@ai-sdk/openai-compatible": "3.0.77",
+    "@preact/signals": "2.11.3",
+    "ai": "7.0.152",
+    "gifenc": "1.0.3",
+    "llm-connect": "2.2.0",
+    "llm-models": "1.13.0",
+    "mediabunny": "1.62.1",
+    "preact": "10.29.8",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@playwright/test": "1.64.1",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  }
+}

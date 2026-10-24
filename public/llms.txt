@@ -1,0 +1,77 @@
+# stepcast
+
+> stepcast turns a screen recording into an interactive, click-through product demo (like Storylane or Arcade). It runs entirely in the browser at https://maxgfr.github.io/stepcast/ — no server, no account. This file tells AI agents how to read and write stepcast demos.
+
+## What a demo is
+
+A demo is one JSON document: a list of steps, each showing one screenshot with
+a hotspot to click, a tooltip, and optional zoom, highlights, blurs and text
+replacements. The JSON Schema is at https://maxgfr.github.io/stepcast/schema.json
+
+Every box is `{ "x", "y", "w", "h" }` normalized to the screenshot: 0–1, origin
+at the top-left corner, `x`/`y` being the box's top-left corner.
+
+```json
+{
+  "version": 1,
+  "title": "Create your first invoice",
+  "description": "From draft to sent in four clicks.",
+  "theme": { "accent": "#6d5efc" },
+  "intro": { "title": "Invoices in a minute", "body": "Four clicks, no setup.", "button": "Start" },
+  "outro": { "title": "That's it", "body": "", "ctaLabel": "Try it free", "ctaUrl": "https://example.com" },
+  "steps": [
+    {
+      "image": "s1",
+      "title": "Open Invoices",
+      "body": "Every invoice lives here, sorted by due date.",
+      "action": "click",
+      "hotspot": { "x": 0.04, "y": 0.21, "w": 0.12, "h": 0.05 },
+      "placement": "auto",
+      "zoom": { "x": 0, "y": 0.1, "w": 0.5, "h": 0.5 },
+      "highlights": [],
+      "redactions": [{ "x": 0.8, "y": 0.02, "w": 0.15, "h": 0.04, "style": "blur" }],
+      "textEdits": [{ "x": 0.05, "y": 0.02, "w": 0.1, "h": 0.04, "text": "Acme", "bg": "#ffffff", "color": "#111111" }]
+    }
+  ],
+  "images": { "s1": "data:image/png;base64,…" }
+}
+```
+
+Fields:
+
+- `steps[].image`: a key of `images`; `images` maps keys to `data:` URLs.
+- `action`: `click`, `type` (a field to fill) or `look` (nothing to click; `hotspot` null).
+- `hotspot`: the element the viewer clicks to go on; null to only look.
+- `placement`: where the tooltip goes: `auto`, `top`, `bottom`, `left`, `right`.
+- `zoom`: the region the camera zooms into (up to 4x), or null.
+- `highlights`: regions kept bright while the rest is dimmed.
+- `redactions`: regions blurred (`blur`), pixelated (`pixelate`) or covered (`solid`). They are painted into the pixels when the demo is shared or exported.
+- `textEdits`: text painted over the screenshot, replacing what it showed.
+- Missing fields get defaults; out-of-range boxes are clamped.
+
+## Making a demo as an agent
+
+1. Take screenshots of the product (one per meaningful screen).
+2. Write the JSON above, with the screenshots as `data:` URLs in `images`.
+3. Save it as a `.json` file. The user opens it from the stepcast home page ("Open a stepcast file"), reviews it, and shares a link or exports HTML, MP4 or GIF.
+
+Good tooltips: title of at most 6 words in the imperative ("Open the billing page"),
+body of one or two sentences on why it matters, not only what to click.
+
+## Inside the app
+
+stepcast's own AI mode asks a vision model (the user's key, through llm-connect)
+to place boxes on a 0–1000 grid drawn over each screenshot, then converts them to
+the 0–1 boxes above. Without a key, the same prompt and a picture of the
+screenshots can be pasted into any chat app, and the JSON answer pasted back.
+
+## Share links
+
+`https://maxgfr.github.io/stepcast/#/play/<bundle>` plays a demo carried in the
+link. The bundle is `"SCB1"`, a little-endian u32 manifest length, the manifest
+JSON (`{ demo, assets: [{ key, type, size }] }`), then the image bytes back to
+back; the whole buffer is compressed with deflate-raw and encoded as base64url.
+`#/gist/<id>` plays a bundle stored in a GitHub Gist (file `stepcast-demo.txt`).
+Replace `#/play/` or `#/gist/` with `#/embed/` or `#/embed/gist/` for an iframe.
+
+Source: https://github.com/maxgfr/stepcast

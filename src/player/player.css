@@ -1,0 +1,343 @@
+/* The player: self-contained, so it also works inlined into an exported HTML file. */
+.sc-player {
+  --sc-accent: #6d5efc;
+  --sc-ink: #17151f;
+  --sc-paper: #ffffff;
+  --sc-muted: #6b6878;
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--sc-ink);
+  outline: none;
+}
+.sc-player *,
+.sc-player *::before,
+.sc-player *::after {
+  box-sizing: border-box;
+}
+.sc-player:focus-visible .sc-frame {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--sc-accent) 45%, transparent),
+    0 24px 60px -24px rgba(20, 16, 40, 0.45);
+}
+
+.sc-frame {
+  position: relative;
+  width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #0e0d14;
+  box-shadow:
+    0 0 0 1px rgba(20, 16, 40, 0.08),
+    0 24px 60px -24px rgba(20, 16, 40, 0.45);
+}
+.sc-full .sc-frame,
+.sc-embed .sc-frame {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.sc-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  animation: sc-fade 0.35s ease;
+}
+.sc-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  transition: transform 0.7s cubic-bezier(0.65, 0, 0.35, 1);
+  will-change: transform;
+}
+.sc-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: fill;
+  user-select: none;
+}
+.sc-img-empty {
+  background: repeating-linear-gradient(45deg, #1b1a24 0 12px, #22212c 12px 24px);
+}
+.sc-spot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  animation: sc-fade 0.5s ease;
+}
+
+.sc-hotspot {
+  position: absolute;
+  padding: 0;
+  margin: 0;
+  border: 2px solid color-mix(in srgb, var(--sc-accent) 85%, white);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sc-accent) 12%, transparent);
+  cursor: pointer;
+  min-width: 18px;
+  min-height: 18px;
+  animation: sc-pop 0.45s 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: background 0.15s ease;
+}
+.sc-hotspot:hover,
+.sc-hotspot:focus-visible {
+  background: color-mix(in srgb, var(--sc-accent) 24%, transparent);
+  outline: none;
+}
+.sc-beacon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--sc-accent);
+  box-shadow: 0 0 0 3px white;
+}
+.sc-beacon::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 3px solid var(--sc-accent);
+  animation: sc-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.sc-tip {
+  position: absolute;
+  z-index: 2;
+  width: min(340px, 62%);
+  padding: 14px 16px 12px;
+  border-radius: 12px;
+  background: var(--sc-paper);
+  color: var(--sc-ink);
+  box-shadow:
+    0 0 0 1px rgba(20, 16, 40, 0.06),
+    0 18px 40px -12px rgba(20, 16, 40, 0.45);
+  font-size: clamp(12px, 1.7cqw, 15px);
+  line-height: 1.45;
+  animation: sc-rise 0.4s 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.sc-tip-title {
+  font-weight: 650;
+  font-size: 1.08em;
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+.sc-tip-body {
+  color: #3d3a49;
+  white-space: pre-line;
+}
+.sc-tip-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sc-tip-count {
+  margin-right: auto;
+  color: var(--sc-muted);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
+.sc-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.5em 0.95em;
+  background: var(--sc-accent);
+  color: white;
+  font: inherit;
+  font-size: 0.92em;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease;
+}
+.sc-btn:hover {
+  filter: brightness(1.08);
+}
+.sc-btn:active {
+  transform: translateY(1px);
+}
+.sc-btn:focus-visible {
+  outline: 2px solid var(--sc-accent);
+  outline-offset: 2px;
+}
+.sc-btn-ghost {
+  background: transparent;
+  color: var(--sc-ink);
+  box-shadow: inset 0 0 0 1px rgba(20, 16, 40, 0.16);
+}
+.sc-btn-lg {
+  font-size: 1em;
+  padding: 0.7em 1.3em;
+}
+
+.sc-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 6%;
+  background: rgba(14, 12, 24, 0.55);
+  backdrop-filter: blur(6px);
+  animation: sc-fade 0.3s ease;
+}
+.sc-card {
+  max-width: 460px;
+  width: 100%;
+  padding: clamp(18px, 4cqw, 32px);
+  border-radius: 16px;
+  background: var(--sc-paper);
+  text-align: center;
+  font-size: clamp(13px, 1.8cqw, 16px);
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5);
+}
+.sc-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.5em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.sc-card p {
+  margin: 0 0 18px;
+  color: #4a4756;
+  white-space: pre-line;
+}
+.sc-card-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.sc-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  z-index: 4;
+  background: rgba(255, 255, 255, 0.12);
+}
+.sc-progress-bar {
+  height: 100%;
+  background: var(--sc-accent);
+  transition: width 0.5s ease;
+}
+
+.sc-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 2px 0;
+  font-size: 13px;
+  color: var(--sc-muted);
+}
+.sc-foot-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-foot a {
+  color: inherit;
+  white-space: nowrap;
+}
+.sc-empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  background: #f1f0f5;
+  color: var(--sc-muted);
+}
+
+@keyframes sc-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sc-rise {
+  from {
+    opacity: 0;
+    transform: translate(var(--sc-tx, -50%), 8px);
+  }
+}
+@keyframes sc-pop {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+@keyframes sc-ping {
+  75%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* The tooltip's own translate is set inline; the rise animation keeps it. */
+.sc-tip-left,
+.sc-tip-right {
+  --sc-tx: 0;
+  animation-name: sc-rise-side;
+}
+@keyframes sc-rise-side {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-50% + 8px));
+  }
+}
+
+/* A narrow player has no room beside the hotspot: the tooltip becomes a bottom sheet. */
+@container (max-width: 520px) {
+  .sc-tip {
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    bottom: 10px !important;
+    width: auto;
+    transform: none !important;
+    translate: none !important;
+    padding: 10px 12px 9px;
+    font-size: 12.5px;
+    animation-name: sc-rise-sheet;
+  }
+  .sc-tip-nav {
+    margin-top: 8px;
+  }
+  /* The hotspot is in the lower half: keep it visible. */
+  .sc-tip.sc-tip-low {
+    top: 10px !important;
+    bottom: auto !important;
+  }
+}
+@keyframes sc-rise-sheet {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sc-player *,
+  .sc-player *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
