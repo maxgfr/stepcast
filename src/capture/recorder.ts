@@ -31,14 +31,20 @@ export interface RecorderEvents {
   onEnded(): void;
 }
 
+type Grabbed = CanvasImageSource & { width: number; height: number };
+
+function release(src: Grabbed): void {
+  if ("close" in src && typeof src.close === "function") src.close();
+}
+
 interface ImageCaptureLike {
   grabFrame(): Promise<ImageBitmap>;
 }
 type ImageCaptureCtor = new (track: MediaStreamTrack) => ImageCaptureLike;
 
 /** Detected screenshots stop after this many; Snap step always works. */
-export const MAX_AUTO_FRAMES = 150;
-const TICK_MS = 250;
+export const MAX_AUTO_FRAMES = 400;
+const TICK_MS = 200;
 
 function pickMime(): string {
   for (const t of ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"]) {
@@ -63,7 +69,7 @@ function clockWorker(): Worker | null {
 export class ScreenRecorder {
   private readonly chunks: Blob[] = [];
   private readonly recorder: MediaRecorder | null;
-  private readonly detector = new KeyframeDetector();
+  private readonly detector: KeyframeDetector;
   private readonly video = document.createElement("video");
   private readonly capture: ImageCaptureLike | null;
   private readonly small = makeCanvas(SAMPLE_WIDTH, 54);
@@ -76,11 +82,15 @@ export class ScreenRecorder {
   private busy = false;
   private stopped = false;
   private lastGray: Uint8Array | null = null;
+  /** The previous tick's frame, kept for a "before the change" keyframe. */
+  private prevSrc: { src: Grabbed; time: number } | null = null;
 
   private constructor(
     readonly stream: MediaStream,
     private readonly events: RecorderEvents,
+    dense: boolean,
   ) {
+    this.detector = new KeyframeDetector(dense ? {} : { periodicMs: 0 });
     const mimeType = pickMime();
     this.recorder =
       typeof MediaRecorder === "undefined"
@@ -105,7 +115,7 @@ export class ScreenRecorder {
 
   static async start(
     events: RecorderEvents,
-    opts: { audio?: boolean } = {},
+    opts: { audio?: boolean; dense?: boolean } = {},
   ): Promise<ScreenRecorder> {
     if (!navigator.mediaDevices?.getDisplayMedia) {
       throw new Error(
@@ -116,7 +126,7 @@ export class ScreenRecorder {
       video: { frameRate: 30, cursor: "always" } as MediaTrackConstraints,
       audio: opts.audio ?? false,
     });
-    const rec = new ScreenRecorder(stream, events);
+    const rec = new ScreenRecorder(stream, events, opts.dense ?? true);
     await rec.video.play().catch(() => undefined);
     rec.recorder?.start(1000);
     rec.startedAt = performance.now();
@@ -134,6 +144,11 @@ export class ScreenRecorder {
   elapsed(): number {
     const now = this.pausedAt ?? performance.now();
     return Math.max(0, (now - this.startedAt - this.pausedTotal) / 1000);
+  }
+
+  /** Screens not saved because an identical one was already taken. */
+  get duplicates(): number {
+    return this.detector.skipped;
   }
 
   get paused(): boolean {
@@ -182,17 +197,13 @@ export class ScreenRecorder {
     return { gray: toGray(ctx.getImageData(0, 0, w, h).data, w, h), w, h };
   }
 
-  private async save(
-    src: CanvasImageSource & { width: number; height: number },
-    diff: Box | null,
-    pinned: boolean,
-  ) {
+  private async save(src: Grabbed, diff: Box | null, pinned: boolean, time = this.elapsed()) {
     const c = makeCanvas(src.width, src.height);
     c.getContext("2d")?.drawImage(src, 0, 0);
     const blob = await canvasToBlob(c, "image/webp", 0.92);
     this.events.onFrame({
       blob,
-      time: this.elapsed(),
+      time,
       diff,
       pinned,
       width: c.width,
@@ -205,14 +216,17 @@ export class ScreenRecorder {
     this.busy = true;
     try {
       const src = await this.grab();
+      const time = this.elapsed();
       const { gray, w, h } = this.sample(src);
       this.lastGray = gray;
-      const hit = this.detector.push(gray, w, h, this.elapsed() * 1000);
+      const hit = this.detector.push(gray, w, h, time * 1000);
       if (hit && this.autoCount < MAX_AUTO_FRAMES) {
         this.autoCount++;
-        await this.save(src, hit.box, false);
+        const shot = hit.before ? this.prevSrc : { src, time };
+        if (shot) await this.save(shot.src, hit.box, false, shot.time);
       }
-      if ("close" in src && typeof src.close === "function") src.close();
+      if (this.prevSrc) release(this.prevSrc.src);
+      this.prevSrc = { src, time };
     } catch {
       // No frame this tick.
     } finally {
@@ -234,6 +248,8 @@ export class ScreenRecorder {
     if (this.stopped) return null;
     this.stopped = true;
     this.worker?.terminate();
+    if (this.prevSrc) release(this.prevSrc.src);
+    this.prevSrc = null;
     if (this.interval) clearInterval(this.interval);
     const rec = this.recorder;
     const result = new Promise<Blob | null>((resolve) => {

@@ -17,6 +17,7 @@ const status = signal<Status>("idle");
 const paused = signal(false);
 const elapsed = signal(0);
 const shots = signal<Shot[]>([]);
+const duplicates = signal(0);
 let recorder: ScreenRecorder | null = null;
 let pipWindow: Window | null = null;
 let ticker: ReturnType<typeof setInterval> | undefined;
@@ -118,6 +119,7 @@ async function openPip(onStop: () => void): Promise<boolean> {
 export function Record() {
   const title = useSignal("Untitled demo");
   const audio = useSignal(false);
+  const dense = useSignal(true);
   const pipOpen = useSignal(false);
   const canPip = Boolean(docPip());
 
@@ -141,13 +143,14 @@ export function Record() {
           },
           onEnded: finish,
         },
-        { audio: audio.value },
+        { audio: audio.value, dense: dense.value },
       );
       status.value = "recording";
       paused.value = false;
       elapsed.value = 0;
       ticker = setInterval(() => {
         elapsed.value = recorder?.elapsed() ?? 0;
+        duplicates.value = recorder?.duplicates ?? 0;
       }, 500);
       // Opening a window needs a user gesture; it is often still valid right after the share dialog.
       pipOpen.value = await openPip(finish);
@@ -189,11 +192,20 @@ export function Record() {
             />
             Record the tab's audio too (kept with the video, never sent to the AI)
           </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={dense.value}
+              onChange={(e) => (dense.value = e.currentTarget.checked)}
+            />
+            Plenty of screenshots: before and after every change, and every second while the screen
+            moves (the AI picks the best ones)
+          </label>
           <ul class="tips">
             <li>
               A browser tab gives the sharpest screenshots, and the cursor stays visible for the AI.
             </li>
-            <li>Move slowly: pause a second on each screen you want in the demo.</li>
+            <li>Rest the cursor on what you are about to click: that screen is kept too.</li>
             {canPip && <li>Floating controls open over your other windows while you record.</li>}
           </ul>
           <div class="record-actions">
@@ -220,7 +232,7 @@ export function Record() {
               ? "Saving…"
               : paused.value
                 ? "Paused"
-                : `Recording · ${shots.value.length} screenshot${shots.value.length === 1 ? "" : "s"}`}
+                : `Recording · ${shots.value.length} screenshot${shots.value.length === 1 ? "" : "s"}${duplicates.value ? ` · ${duplicates.value} duplicate${duplicates.value === 1 ? "" : "s"} skipped` : ""}`}
           </span>
         </div>
         <div class="record-controls">

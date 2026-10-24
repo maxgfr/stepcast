@@ -6,7 +6,7 @@ import { blobToImage, canvasToBlob, makeCanvas } from "../render/image";
 import { KeyframeDetector, SAMPLE_WIDTH, toGray } from "./keyframes";
 import type { CapturedFrame } from "./recorder";
 
-const STEP_S = 0.25;
+const STEP_S = 0.2;
 const MAX_SECONDS = 20 * 60;
 
 function once(target: EventTarget, type: string): Promise<void> {
@@ -85,12 +85,19 @@ export async function framesFromVideo(
     if (!ctx) throw new Error("Canvas 2D is not available");
     const detector = new KeyframeDetector();
     const end = Math.min(duration, MAX_SECONDS);
+    const at = (t: number) => Math.min(t, Math.max(0, duration - 0.05));
     for (let t = 0; t <= end; t += STEP_S) {
       if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
-      await seek(video, Math.min(t, Math.max(0, duration - 0.05)));
+      await seek(video, at(t));
       ctx.drawImage(video, 0, 0, w, h);
       const hit = detector.push(toGray(ctx.getImageData(0, 0, w, h).data, w, h), w, h, t * 1000);
-      if (hit) onFrame({ ...(await frameOf(video, t, false)), diff: hit.box });
+      if (hit?.before) {
+        // The screen just before it changed: step back one sample.
+        const prev = Math.max(0, t - STEP_S);
+        await seek(video, at(prev));
+        onFrame({ ...(await frameOf(video, prev, false)), diff: hit.box });
+        await seek(video, at(t));
+      } else if (hit) onFrame({ ...(await frameOf(video, t, false)), diff: hit.box });
       onProgress(Math.min(1, t / end));
     }
     onProgress(1);
