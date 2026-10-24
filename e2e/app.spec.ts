@@ -117,6 +117,23 @@ test("home renders without errors", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("the page is isolated, so speech to text can use several threads", async ({ page }) => {
+  await page.goto("./");
+  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
+});
+
+test("on a host that sends no headers, the service worker isolates the page", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/bare/stepcast/");
+  // It reloads once when the worker takes over.
+  await expect
+    .poll(() => page.evaluate(() => crossOriginIsolated).catch(() => false), { timeout: 10_000 })
+    .toBe(true);
+  await expect(page.getByRole("heading", { name: /Record your screen/ })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("AI mode: record, generate with a model, share a link, export HTML", async ({
   page,
   context,

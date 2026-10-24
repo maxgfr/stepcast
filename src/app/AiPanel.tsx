@@ -9,6 +9,7 @@ import { useEffect, useRef } from "preact/hooks";
 import {
   defaultEngine,
   gatherSaid,
+  providerCanTranscribe,
   saidPerFrame,
   type TranscribeEngine,
   transcribeNarration,
@@ -94,13 +95,15 @@ export function aiFrames(): (FrameNote & { asset: string; url: string })[] {
   }));
 }
 
-/** How the narration is transcribed: the provider's model, or Whisper here (fast or accurate). */
-type Transcriber = "provider" | "device-fast" | "device-accurate";
+/** How the narration is transcribed: a model on this device, or the provider's. */
+type Transcriber = TranscribeEngine;
+const TRANSCRIBERS: readonly Transcriber[] = ["parakeet", "canary", "whisper", "provider"];
 const TRANSCRIBER_KEY = "stepcast-transcriber";
 function loadTranscriber(): Transcriber | null {
   try {
     const v = localStorage.getItem(TRANSCRIBER_KEY);
-    return v === "provider" || v === "device-fast" || v === "device-accurate" ? v : null;
+    // Older choices (Whisper's presets) are forgotten: the default is better now.
+    return TRANSCRIBERS.find((t) => t === v) ?? null;
   } catch {
     return null;
   }
@@ -125,14 +128,11 @@ async function ensureTranscript(
   const blob = await getBlob(p.id, p.narration.key);
   if (!blob) return;
   const settings = savedSettings();
-  const choice =
-    transcriber.value ?? (defaultEngine(settings) === "provider" ? "provider" : "device-fast");
-  const engine: TranscribeEngine = choice === "provider" ? "provider" : "device";
+  const engine = transcriber.value ?? defaultEngine();
   const transcript = await transcribeNarration(
     blob,
     engine,
     settings,
-    choice === "device-accurate" ? "accurate" : "fast",
     (pr) =>
       onProgress(
         pr.ratio !== undefined ? `${pr.message} ${Math.round(pr.ratio * 100)}%` : pr.message,
@@ -148,8 +148,8 @@ function NarrationField() {
   if (!p?.narration) return null;
   const n = p.narration;
   const settings = llmState.value.saved ? savedSettings() : null;
-  const providerOk = defaultEngine(settings) === "provider";
-  const value = transcriber.value ?? (providerOk ? "provider" : "device-fast");
+  const providerOk = providerCanTranscribe(settings);
+  const value = transcriber.value ?? defaultEngine();
   const words = n.transcript?.words.length ?? 0;
   const run = async () => {
     try {
@@ -179,11 +179,12 @@ function NarrationField() {
           disabled={!!busy.value}
           onChange={(e) => setTranscriber(e.currentTarget.value as Transcriber)}
         >
+          <option value="parakeet">This device: NVIDIA Parakeet (best, 670 MB once)</option>
+          <option value="canary">This device: NVIDIA Canary (en, fr, de, es; 215 MB once)</option>
+          <option value="whisper">This device: Whisper (other languages)</option>
           <option value="provider" disabled={!providerOk}>
             Your AI provider{providerOk ? "" : " (no speech-to-text)"}
           </option>
-          <option value="device-fast">This device: Whisper, fast (80 MB, once)</option>
-          <option value="device-accurate">This device: Whisper, accurate (600 MB, a GPU)</option>
         </select>
         {!n.transcript && (
           <Button size="sm" disabled={!!busy.value} onClick={() => void run()}>
