@@ -6,7 +6,8 @@
 
 import { toWebVtt } from "llm-connect";
 import type { Demo } from "../model/demo";
-import { frameAt, prepareTour, subtitleCues, type TourOptions } from "../render/tour";
+import { type BubbleOptions, cameraTime, drawBubble, openCamera } from "../render/bubble";
+import { frameAt, prepareTour, subtitleCues, type Tour, type TourOptions } from "../render/tour";
 import { encodeBundle } from "./bundle";
 import { appUrl, type BlobSource, packDemo } from "./pack";
 
@@ -129,12 +130,42 @@ export function gistLink(id: string): string {
 
 export type Progress = (ratio: number) => void;
 
+export interface VideoOptions extends TourOptions {
+  /** A camera bubble, from the camera file recorded next to the screen. */
+  camera?: BubbleOptions | null;
+}
+
+/** Draws each frame's camera bubble, reading the camera file along the film. */
+async function bubbles(
+  tour: Tour,
+  fps: number,
+  total: number,
+  camera: BubbleOptions | null | undefined,
+) {
+  if (!camera) return null;
+  const file = await openCamera(camera.blob);
+  const times = Array.from({ length: total }, (_, f) => cameraTime(tour, f / fps, camera.offset));
+  const frames = file.frames(times);
+  return {
+    file,
+    async draw(ctx: CanvasRenderingContext2D) {
+      const next = await frames.next();
+      if (next.value)
+        drawBubble(ctx, next.value, tour.width, tour.height, camera.corner, camera.size);
+    },
+    async drawAt(ctx: CanvasRenderingContext2D, t: number) {
+      const src = await file.at(cameraTime(tour, t, camera.offset));
+      if (src) drawBubble(ctx, src, tour.width, tour.height, camera.corner, camera.size);
+    },
+  };
+}
+
 export async function exportVideo(
   demo: Demo,
   source: BlobSource,
   onProgress: Progress,
   signal?: AbortSignal,
-  options: TourOptions = {},
+  options: VideoOptions = {},
 ): Promise<Blob> {
   const {
     BufferTarget,
@@ -165,14 +196,20 @@ export async function exportVideo(
   await output.start();
   const fps = 30;
   const total = Math.ceil(tour.duration * fps);
-  for (let f = 0; f < total; f++) {
-    if (signal?.aborted) {
-      await output.cancel();
-      throw new DOMException("Cancelled", "AbortError");
+  const bubble = await bubbles(tour, fps, total, options.camera);
+  try {
+    for (let f = 0; f < total; f++) {
+      if (signal?.aborted) {
+        await output.cancel();
+        throw new DOMException("Cancelled", "AbortError");
+      }
+      frameAt(ctx, tour, f / fps);
+      await bubble?.draw(ctx);
+      await video.add(f / fps, 1 / fps);
+      if (f % 10 === 0) onProgress(f / total);
     }
-    frameAt(ctx, tour, f / fps);
-    await video.add(f / fps, 1 / fps);
-    if (f % 10 === 0) onProgress(f / total);
+  } finally {
+    bubble?.file.dispose();
   }
   await output.finalize();
   onProgress(1);
@@ -194,7 +231,7 @@ export async function exportGif(
   source: BlobSource,
   onProgress: Progress,
   signal?: AbortSignal,
-  options: TourOptions = {},
+  options: VideoOptions = {},
 ): Promise<Blob> {
   const { GIFEncoder, applyPalette, quantize } = await import("gifenc");
   const tour = await prepareTour(demo, source, 880, options);
@@ -206,12 +243,14 @@ export async function exportGif(
   const gif = GIFEncoder();
   const fps = 10;
   const total = Math.ceil(tour.duration * fps);
+  const bubble = await bubbles(tour, fps, total, options.camera);
 
   // One palette for the whole film, from a sample of every shot: unchanged
   // pixels then keep the same index from frame to frame.
   const sample: number[] = [];
   for (const shot of tour.shots) {
     frameAt(ctx, tour, shot.start + shot.duration * 0.8, true);
+    await bubble?.drawAt(ctx, shot.start + shot.duration * 0.8);
     const { data } = ctx.getImageData(0, 0, tour.width, tour.height);
     for (let i = 0; i < data.length; i += 4 * 7)
       sample.push(data[i] as number, data[i + 1] as number, data[i + 2] as number, 255);
@@ -247,6 +286,7 @@ export async function exportGif(
   for (let f = 0; f < total; f++) {
     if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
     frameAt(ctx, tour, f / fps, true);
+    await bubble?.draw(ctx);
     const { data } = ctx.getImageData(0, 0, tour.width, tour.height);
     if (pending && sameFrame(pending.data, data)) pending.frames++;
     else {
@@ -259,6 +299,7 @@ export async function exportGif(
     }
   }
   flush();
+  bubble?.file.dispose();
   gif.finish();
   onProgress(1);
   return new Blob([gif.bytes() as BlobPart], { type: "image/gif" });

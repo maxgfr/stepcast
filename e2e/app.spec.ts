@@ -88,10 +88,12 @@ const cors = {
   "access-control-allow-methods": "GET, POST, OPTIONS",
 };
 
-async function record(page: Page, snaps = 2) {
+async function record(page: Page, snaps = 2, opts: { camera?: boolean } = {}) {
   await page.goto("./#/record");
+  if (opts.camera) await page.getByLabel(/Record my camera too/).check();
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(page.getByText(/Recording ·/)).toBeVisible();
+  if (opts.camera) await expect(page.getByLabel("Camera preview")).toBeVisible();
   for (let i = 0; i < snaps; i++) {
     await page.getByRole("button", { name: "Snap step" }).first().click();
     await page.waitForTimeout(500);
@@ -301,4 +303,45 @@ test("an agent-written JSON demo opens, and travels through a Gist", async ({ pa
   const viewer = await context.newPage();
   await viewer.goto(link);
   await expect(viewer.getByText("Press the button")).toBeVisible();
+});
+
+test("the camera recorded next to the screen becomes a bubble in the MP4", async ({ page }) => {
+  await page.context().grantPermissions(["camera"]);
+  await record(page, 2, { camera: true });
+  await page.getByRole("button", { name: /Manual mode/ }).click();
+  await expect(page.locator(".step-item")).toHaveCount(2);
+  await page.getByRole("button", { name: "Share" }).click();
+  await expect(page.getByLabel("Camera bubble")).toBeChecked();
+  await page.getByLabel("Bubble corner").selectOption("top-left");
+  const download = page.waitForEvent("download", { timeout: 60_000 });
+  await page.getByRole("button", { name: "MP4 video" }).click();
+  const file = await (await download).path();
+  // The top-left corner holds the bubble: the fake camera is not the screen's colors.
+  const corner = await page.evaluate(
+    async (bytes) => {
+      const blob = new Blob([new Uint8Array(bytes)], { type: "video/mp4" });
+      const video = document.createElement("video");
+      video.muted = true;
+      video.src = URL.createObjectURL(blob);
+      await new Promise((r) => (video.onloadeddata = r));
+      video.currentTime = 1.5;
+      await new Promise((r) => (video.onseeked = r));
+      const c = document.createElement("canvas");
+      c.width = video.videoWidth;
+      c.height = video.videoHeight;
+      const ctx = c.getContext("2d") as CanvasRenderingContext2D;
+      ctx.drawImage(video, 0, 0);
+      const d = Math.min(c.width, c.height);
+      const at = (x: number, y: number) =>
+        Array.from(ctx.getImageData(x, y, 1, 1).data.slice(0, 3));
+      // The bubble's ring is white, just outside its circle
+      return {
+        ring: at(Math.round(d * 0.035 + d * 0.12), Math.round(d * 0.035) - 1),
+        size: [c.width, c.height],
+      };
+    },
+    Array.from(await readFile(file)),
+  );
+  expect(corner.size[0]).toBeGreaterThan(0);
+  expect(Math.min(...corner.ring)).toBeGreaterThan(200);
 });

@@ -3,6 +3,7 @@ import { render } from "preact";
 import { useEffect } from "preact/hooks";
 import { clock } from "../ai/prompts";
 import { type CapturedFrame, ScreenRecorder } from "../capture/recorder";
+import { SideRecorder } from "../capture/side";
 import { navigate } from "./router";
 import { createProject } from "./state";
 import { Button, errorText, Icon, toast } from "./ui";
@@ -19,6 +20,8 @@ const elapsed = signal(0);
 const shots = signal<Shot[]>([]);
 const duplicates = signal(0);
 let recorder: ScreenRecorder | null = null;
+/** The camera, recorded into its own file for the video exports' bubble. */
+const camera = signal<SideRecorder | null>(null);
 let pipWindow: Window | null = null;
 let ticker: ReturnType<typeof setInterval> | undefined;
 
@@ -38,8 +41,13 @@ async function snap(): Promise<void> {
 
 function togglePause(): void {
   if (!recorder) return;
-  if (recorder.paused) recorder.resume();
-  else recorder.pause();
+  if (recorder.paused) {
+    recorder.resume();
+    camera.value?.resume();
+  } else {
+    recorder.pause();
+    camera.value?.pause();
+  }
   paused.value = recorder.paused;
 }
 
@@ -52,14 +60,16 @@ async function stop(title: string): Promise<void> {
   try {
     const rec = recorder;
     recorder = null;
-    const video = await rec.stop();
+    const cam = camera.value;
+    camera.value = null;
+    const [video, cameraTake] = await Promise.all([rec.stop(), cam?.stop() ?? null]);
     const frames = shots.value;
     if (frames.length === 0) {
       toast("Nothing was captured. Try again, and click through a few screens.", "error");
       status.value = "idle";
       return;
     }
-    const id = await createProject(title, frames, video);
+    const id = await createProject(title, frames, video, false, { camera: cameraTake });
     for (const s of frames) URL.revokeObjectURL(s.url);
     shots.value = [];
     status.value = "idle";
@@ -119,6 +129,7 @@ async function openPip(onStop: () => void): Promise<boolean> {
 export function Record() {
   const title = useSignal("Untitled demo");
   const audio = useSignal(false);
+  const withCamera = useSignal(false);
   const dense = useSignal(true);
   const pipOpen = useSignal(false);
   const canPip = Boolean(docPip());
@@ -147,6 +158,15 @@ export function Record() {
       );
       status.value = "recording";
       paused.value = false;
+      if (withCamera.value) {
+        const screen = recorder;
+        void SideRecorder.start("camera", () => screen.elapsed())
+          .then((side) => {
+            if (recorder === screen) camera.value = side;
+            else void side.stop();
+          })
+          .catch(() => toast("The camera is not available: recording the screen only.", "error"));
+      }
       elapsed.value = 0;
       ticker = setInterval(() => {
         elapsed.value = recorder?.elapsed() ?? 0;
@@ -195,6 +215,14 @@ export function Record() {
           <label class="check">
             <input
               type="checkbox"
+              checked={withCamera.value}
+              onChange={(e) => (withCamera.value = e.currentTarget.checked)}
+            />
+            Record my camera too, for a bubble in the MP4 and GIF (stays on this device)
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
               checked={dense.value}
               onChange={(e) => (dense.value = e.currentTarget.checked)}
             />
@@ -235,6 +263,19 @@ export function Record() {
                 : `Recording · ${shots.value.length} screenshot${shots.value.length === 1 ? "" : "s"}${duplicates.value ? ` · ${duplicates.value} duplicate${duplicates.value === 1 ? "" : "s"} skipped` : ""}`}
           </span>
         </div>
+        {camera.value && (
+          <video
+            class="cam-preview"
+            autoPlay
+            muted
+            playsInline
+            aria-label="Camera preview"
+            ref={(el) => {
+              if (el && camera.value && el.srcObject !== camera.value.stream)
+                el.srcObject = camera.value.stream;
+            }}
+          />
+        )}
         <div class="record-controls">
           <Button
             variant="primary"

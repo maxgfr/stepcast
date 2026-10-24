@@ -1,5 +1,7 @@
 import { useSignal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
+import { getBlob } from "../model/store";
+import { BUBBLE_CORNERS, type BubbleCorner } from "../render/bubble";
 import type { VideoText } from "../render/tour";
 import { encodeBundle } from "../share/bundle";
 import {
@@ -13,6 +15,7 @@ import {
   fileName,
   gistLink,
   playLink,
+  type VideoOptions,
 } from "../share/export";
 import { loadGithubToken, publishGist, saveGithubToken } from "../share/gist";
 import { bundleForLink, LINK_LIMIT, packDemo } from "../share/pack";
@@ -59,6 +62,8 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   const busy = useSignal<string | null>(null);
   const ratio = useSignal(0);
   const videoText = useSignal<VideoText>("tooltips");
+  const bubble = useSignal(true);
+  const corner = useSignal<BubbleCorner>("bottom-right");
   const abort = useRef<AbortController | null>(null);
   const p = project.value;
 
@@ -69,6 +74,16 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   if (!p) return null;
   const demo = p.demo;
   const empty = demo.steps.length === 0;
+  const camera = p.camera ?? null;
+
+  /** What the MP4 and GIF show besides the demo: the text mode, and the camera bubble. */
+  const videoOptions = async (): Promise<VideoOptions> => {
+    const blob = camera && bubble.value ? await getBlob(p.id, camera.key) : null;
+    return {
+      text: videoText.value,
+      camera: blob && camera ? { blob, offset: camera.offset, corner: corner.value } : null,
+    };
+  };
 
   const task = async (label: string, fn: (signal: AbortSignal) => Promise<void>) => {
     const ctrl = new AbortController();
@@ -230,7 +245,7 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                       getAssetBlob,
                       (r) => (ratio.value = r),
                       signal,
-                      { text: videoText.value },
+                      await videoOptions(),
                     );
                     download(
                       blob,
@@ -247,9 +262,13 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                 onClick={() =>
                   void task("Rendering the GIF…", async (signal) =>
                     download(
-                      await exportGif(demo, getAssetBlob, (r) => (ratio.value = r), signal, {
-                        text: videoText.value,
-                      }),
+                      await exportGif(
+                        demo,
+                        getAssetBlob,
+                        (r) => (ratio.value = r),
+                        signal,
+                        await videoOptions(),
+                      ),
                       fileName(demo.title, "gif"),
                     ),
                   )
@@ -297,6 +316,31 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                 ))}
               </fieldset>
             </div>
+            {camera && (
+              <div class="row video-text">
+                <label class="check">
+                  <input
+                    type="checkbox"
+                    checked={bubble.value}
+                    onChange={(e) => (bubble.value = e.currentTarget.checked)}
+                  />
+                  Camera bubble
+                </label>
+                <select
+                  class="input corner-select"
+                  aria-label="Bubble corner"
+                  value={corner.value}
+                  disabled={!bubble.value}
+                  onChange={(e) => (corner.value = e.currentTarget.value as BubbleCorner)}
+                >
+                  {BUBBLE_CORNERS.map((c) => (
+                    <option key={c} value={c}>
+                      {c.replace("-", " ").replace(/^./, (x) => x.toUpperCase())}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <p class="muted small">
               The HTML file plays offline, from disk or any host. The JSON keeps everything editable
               (open it from the home page) and follows the{" "}
