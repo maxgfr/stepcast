@@ -82,13 +82,18 @@ async function encode(c: HTMLCanvasElement): Promise<ModelImage> {
 }
 
 /** One screenshot at most `max` px wide, with the grid and an optional label. */
-export async function gridImage(url: string, max = 1280, label?: string): Promise<ModelImage> {
+export async function gridImage(
+  url: string,
+  max = 1280,
+  label?: string,
+  grid = true,
+): Promise<ModelImage> {
   const img = await loadImage(url);
   const { w, h } = fitSize(img.naturalWidth, img.naturalHeight, max);
   const c = makeCanvas(w, h);
   const ctx = ctx2d(c);
   ctx.drawImage(img, 0, 0, w, h);
-  drawGrid(ctx, 0, 0, w, h);
+  if (grid) drawGrid(ctx, 0, 0, w, h);
   if (label)
     badge(ctx, w - Math.max(90, w / 9), h - Math.max(30, h / 22), label, Math.max(12, w / 70));
   return encode(c);
@@ -118,6 +123,11 @@ async function sheetCanvas(
     badge(ctx, x + 6, y + 6, frames[i]?.label ?? String(i + 1), Math.max(14, tileW / 16));
   });
   return c;
+}
+
+/** The screenshot as it is, at most `max` px wide: models place boxes best on a clean image. */
+export function plainImage(url: string, max = 1280): Promise<ModelImage> {
+  return gridImage(url, max, undefined, false);
 }
 
 /** Numbered thumbnails, `perSheet` per image. */

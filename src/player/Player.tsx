@@ -23,11 +23,46 @@ type Phase = "intro" | "step" | "end";
 const BRAND_URL = "https://maxgfr.github.io/stepcast/";
 
 /** Where the tooltip goes when the step says "auto". */
-export function autoPlacement(b: Box | null): Exclude<Placement, "auto"> {
+const overlap = (a: Box, b: Box) =>
+  Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) *
+  Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+/**
+ * Where the tooltip goes when the step says "auto": the side of the hotspot
+ * where a tooltip (about `tip` of the frame) stays inside the frame and covers
+ * the least of what matters (the highlights). Below wins ties, then above.
+ */
+export function autoPlacement(
+  b: Box | null,
+  avoid: Box[] = [],
+  tip = { w: 0.3, h: 0.22 },
+): Exclude<Placement, "auto"> {
   if (!b) return "bottom";
+  const gap = 0.02;
+  const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
-  if (b.h > 0.55) return b.x + b.w / 2 < 0.5 ? "right" : "left";
-  return cy < 0.55 ? "bottom" : "top";
+  const at: Record<Exclude<Placement, "auto">, Box> = {
+    bottom: { x: cx - tip.w / 2, y: b.y + b.h + gap, ...tip },
+    top: { x: cx - tip.w / 2, y: b.y - gap - tip.h, ...tip },
+    right: { x: b.x + b.w + gap, y: cy - tip.h / 2, ...tip },
+    left: { x: b.x - gap - tip.w, y: cy - tip.h / 2, ...tip },
+  };
+  const frame: Box = { x: 0, y: 0, w: 1, h: 1 };
+  const order = ["bottom", "top", "right", "left"] as const;
+  let best: (typeof order)[number] = "bottom";
+  let bestScore = Number.POSITIVE_INFINITY;
+  order.forEach((side, i) => {
+    const r = at[side];
+    // Off-frame parts are nudged back in by the player, over the hotspot: costly.
+    const outside = tip.w * tip.h - overlap(r, frame);
+    const covered = avoid.reduce((sum, a) => sum + overlap(r, a), 0);
+    const score = outside * 4 + covered * 2 + i * 0.002;
+    if (score < bestScore) {
+      bestScore = score;
+      best = side;
+    }
+  });
+  return best;
 }
 
 function tooltipStyle(
@@ -140,7 +175,7 @@ export function Player({
   const [aspect, setAspect] = useState(16 / 10);
   const root = useRef<HTMLElement>(null);
   const tip = useRef<HTMLDivElement>(null);
-  const [, setWidth] = useState(0);
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const step = steps[index];
 
   useEffect(() => {
@@ -203,7 +238,7 @@ export function Player({
   useEffect(() => {
     const el = root.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -235,7 +270,16 @@ export function Player({
 
   const view = phase === "step" ? viewFor(step.zoom) : viewFor(null);
   const hot = step.hotspot ? inView(mapBox(step.hotspot, view)) : null;
-  const placement = step.placement === "auto" ? autoPlacement(hot) : step.placement;
+  const placement =
+    step.placement === "auto"
+      ? autoPlacement(
+          hot,
+          step.highlights.map((h) => inView(mapBox(h, view))),
+          size.w
+            ? { w: Math.min(340, size.w * 0.62) / size.w, h: 150 / (size.w / aspect) }
+            : undefined,
+        )
+      : step.placement;
   const accent = demo.theme.accent || "#6d5efc";
   const last = index === steps.length - 1;
 
@@ -248,7 +292,16 @@ export function Player({
       aria-roledescription="interactive demo"
       aria-label={demo.title}
     >
-      <div class="sc-frame" style={{ aspectRatio: String(aspect) }}>
+      <div
+        class="sc-frame"
+        style={{
+          aspectRatio: String(aspect),
+          // An embed fills its iframe: as large as fits, whatever the iframe's shape.
+          ...(mode === "embed" && size.w && size.h
+            ? { width: `${Math.floor(Math.min(size.w, size.h * aspect))}px` }
+            : {}),
+        }}
+      >
         <StepScene
           key={step.id}
           step={step}

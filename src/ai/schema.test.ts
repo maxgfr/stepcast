@@ -96,11 +96,12 @@ describe("prompts", () => {
       ...DEFAULT_BRIEF,
       goal: "Show billing",
       language: "French",
-      edits: "Globex → Acme",
+      replacements: [{ from: "Globex", to: "Acme" }],
     };
     const text = demoInstructions(b);
-    expect(text).toContain("0–1000 grid");
-    expect(text).toContain("Globex → Acme");
+    expect(text).toContain("0–1000 scale");
+    expect(pastePrompt(b, [])).toContain("0–1000 grid");
+    expect(pickPrompt(b, 3, []).text).toContain('"Globex" will be replaced by "Acme"');
     expect(pickPrompt(b, 20, [{ time: 1, pinned: true, diff: null }]).text).toContain(
       "pinned frames 1",
     );

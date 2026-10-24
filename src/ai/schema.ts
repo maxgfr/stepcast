@@ -34,19 +34,30 @@ const stepFields = {
   title: z.string().describe("At most 6 words, imperative"),
   body: z.string().describe("One or two sentences, at most 30 words"),
   action: z.enum(ACTIONS),
-  hotspot: gridBox
+  target: z
+    .string()
     .nullable()
-    .describe("Tight box around the element to interact with; null to just look"),
+    .describe(
+      "The element to interact with, precisely, e.g. 'the Active filter link below the list'; null to just look",
+    ),
+  hotspot: gridBox.nullable().describe("Tight box around that element; null to just look"),
   placement: z.enum(PLACEMENTS),
   zoom: gridBox
     .nullable()
     .describe("Region to zoom into when the hotspot is small; null otherwise"),
-  highlights: z.array(gridBox).describe("0–2 regions worth spotlighting"),
+  highlights: z
+    .array(gridBox.extend({ what: z.string().describe("What the region shows") }))
+    .describe("0–2 regions worth spotlighting"),
   redactions: z
     .array(gridBox.extend({ what: z.string().describe("What is hidden, e.g. 'email address'") }))
     .describe("Personal or secret data to blur"),
   textEdits: z
-    .array(gridBox.extend({ text: z.string().describe("Replacement text") }))
+    .array(
+      gridBox.extend({
+        original: z.string().describe("The exact text shown on screen now"),
+        text: z.string().describe("Replacement text"),
+      }),
+    )
     .describe("Text to replace on screen, only when the brief asks for it"),
 };
 
@@ -96,7 +107,7 @@ export function applyFields(step: Step, a: RefineAnswer): Step {
     placement: a.placement,
     hotspot: a.hotspot ? fromGrid(a.hotspot) : null,
     zoom: usefulZoom(a.zoom ? fromGrid(a.zoom) : null),
-    highlights: a.highlights.slice(0, 3).map(fromGrid),
+    highlights: a.highlights.slice(0, 3).map((b) => fromGrid(b)),
     redactions: a.redactions.map((r) => ({ ...fromGrid(r), style: "blur" as const })),
     textEdits: a.textEdits.map((t) => ({
       ...fromGrid(t),
@@ -131,11 +142,12 @@ export function stepToAnswer(step: Step): RefineAnswer {
     body: step.body,
     action: step.action,
     placement: step.placement,
+    target: step.hotspot ? step.title || "the highlighted element" : null,
     hotspot: step.hotspot ? toGrid(step.hotspot) : null,
     zoom: step.zoom ? toGrid(step.zoom) : null,
-    highlights: step.highlights.map(toGrid),
+    highlights: step.highlights.map((b) => ({ ...toGrid(b), what: "highlighted region" })),
     redactions: step.redactions.map((r) => ({ ...toGrid(r), what: "hidden" })),
-    textEdits: step.textEdits.map((t) => ({ ...toGrid(t), text: t.text })),
+    textEdits: step.textEdits.map((t) => ({ ...toGrid(t), original: "", text: t.text })),
   };
 }
 
@@ -165,6 +177,7 @@ function fillDefaults(raw: unknown): unknown {
       body: "",
       action: "click",
       placement: "auto",
+      target: null,
       hotspot: null,
       zoom: null,
       highlights: [],

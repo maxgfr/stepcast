@@ -25,7 +25,9 @@ import {
 } from "llm-connect";
 import type { z } from "zod";
 import type { Step } from "../model/demo";
+import { applyGrounding, groundPrompt, groundSchema, targetsOf } from "./ground";
 import {
+  activeReplacements,
   type Brief,
   demoInstructions,
   demoText,
@@ -39,12 +41,13 @@ import {
   type DemoAnswer,
   demoAnswerSchema,
   pickSchema,
+  type RefineAnswer,
   refineSchema,
   stepsFromAnswer,
   stepToAnswer,
 } from "./schema";
 import { capabilitiesOf } from "./settings";
-import { contactSheets, gridImage, type ModelImage } from "./sheets";
+import { contactSheets, type ModelImage, plainImage } from "./sheets";
 
 export interface AiFrame extends FrameNote {
   asset: string;
@@ -52,7 +55,7 @@ export interface AiFrame extends FrameNote {
 }
 
 export interface Progress {
-  phase: "prepare" | "choose" | "annotate" | "done";
+  phase: "prepare" | "choose" | "annotate" | "place" | "done";
   message: string;
 }
 
@@ -66,7 +69,27 @@ export interface DemoResult {
 /** More frames than this and the first pass runs. */
 const DIRECT_LIMIT = 12;
 /** Frames sent to the first pass at most (sampled evenly, pinned ones kept). */
-const PICK_LIMIT = 48;
+const PICK_LIMIT = 64;
+/** Placement requests running at once. */
+const PLACE_CONCURRENCY = 4;
+
+/** `fn` over `items`, at most `limit` at a time, results in order. */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, i: number) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i] as T, i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
 
 export class AiError extends Error {
   constructor(
@@ -173,19 +196,51 @@ export async function chooseFrames(
   return chosen.slice(0, brief.maxSteps);
 }
 
-/** Pass 2: the demo for these screenshots. */
+/**
+ * Places a step's boxes precisely: one small request on the clean screenshot.
+ * When it fails, the step keeps the boxes the demo pass gave it.
+ */
+export async function placeStep<T extends RefineAnswer>(
+  settings: LlmSettings,
+  answer: T,
+  url: string,
+  replacements: { from: string; to: string }[],
+  signal?: AbortSignal,
+): Promise<T> {
+  const targets = targetsOf(answer, replacements);
+  if (targets.length === 0) return answer;
+  const { instructions, text } = groundPrompt(targets);
+  try {
+    const found = await call(
+      settings,
+      groundSchema,
+      instructions,
+      [{ role: "user", content: [{ type: "text", text }, imagePart(await plainImage(url))] }],
+      "low",
+      signal,
+    );
+    return { ...answer, ...applyGrounding(answer, targets, found) };
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    console.warn("stepcast: precise placement failed, keeping the first boxes", err);
+    return answer;
+  }
+}
+
+/** Pass 2: the demo for these screenshots, then its boxes placed precisely. */
 export async function annotate(
   settings: LlmSettings,
   brief: Brief,
   frames: AiFrame[],
   signal?: AbortSignal,
+  onProgress?: (p: Progress) => void,
 ): Promise<DemoResult> {
   const content: Exclude<ModelMessage["content"], string> = [
     { type: "text", text: demoText(brief, frames) },
   ];
   for (const [i, f] of frames.entries()) {
     content.push({ type: "text", text: `Image ${i + 1}:` });
-    content.push(imagePart(await gridImage(f.url, 1280, `Image ${i + 1}`)));
+    content.push(imagePart(await plainImage(f.url)));
   }
   const answer = await call(
     settings,
@@ -195,10 +250,20 @@ export async function annotate(
     "medium",
     signal,
   );
-  const steps = stepsFromAnswer(answer, frames);
+  onProgress?.({
+    phase: "place",
+    message: `Placing hotspots, blurs and text on ${answer.steps.length} screens…`,
+  });
+  const replacements = activeReplacements(brief);
+  const placed = await mapLimit(answer.steps, PLACE_CONCURRENCY, async (st) => {
+    const f = frames[st.image - 1];
+    return f ? placeStep(settings, st, f.url, replacements, signal) : st;
+  });
+  const final = { ...answer, steps: placed };
+  const steps = stepsFromAnswer(final, frames);
   if (steps.length === 0)
     throw new AiError("The model returned no usable step. Try again or rephrase the goal.", true);
-  return { answer, steps, used: frames };
+  return { answer: final, steps, used: frames };
 }
 
 export async function generateDemo(
@@ -222,7 +287,7 @@ export async function generateDemo(
     phase: "annotate",
     message: `Writing ${chosen.length} steps: hotspots, tooltips, zooms…`,
   });
-  const result = await annotate(settings, brief, chosen, signal);
+  const result = await annotate(settings, brief, chosen, signal, onProgress);
   onProgress({ phase: "done", message: `${result.steps.length} steps ready.` });
   return result;
 }
@@ -236,7 +301,7 @@ export async function refineStep(
   instruction: string,
   signal?: AbortSignal,
 ): Promise<Step> {
-  const image = await gridImage(url, 1280);
+  const image = await plainImage(url);
   const answer = await call(
     settings,
     refineSchema,
@@ -253,5 +318,5 @@ export async function refineStep(
     "medium",
     signal,
   );
-  return applyFields(step, answer);
+  return applyFields(step, await placeStep(settings, answer, url, [], signal));
 }

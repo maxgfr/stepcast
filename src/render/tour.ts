@@ -196,6 +196,7 @@ function tooltip(
   H: number,
   k: number,
   label: string,
+  view: View,
 ) {
   if (k <= 0 || (!step.title && !step.body)) return;
   const tw = Math.min(W * 0.36, 560);
@@ -208,7 +209,14 @@ function tooltip(
   ctx.font = `400 ${bs}px system-ui, sans-serif`;
   const bl = step.body ? wrap(ctx, step.body, tw - pad * 2) : [];
   const th = pad * 2 + tl.length * ts * 1.3 + bl.length * bs * 1.45 + bs * 1.8;
-  const placement = step.placement === "auto" ? autoPlacement(hot) : step.placement;
+  const placement =
+    step.placement === "auto"
+      ? autoPlacement(
+          hot,
+          step.highlights.map((h) => mapBox(h, view)),
+          { w: tw / W, h: th / H },
+        )
+      : step.placement;
   let x: number;
   let y: number;
   const gap = 18;
@@ -349,7 +357,16 @@ export function frameAt(ctx: CanvasRenderingContext2D, tour: Tour, t: number, st
       ctx.stroke();
       ctx.restore();
     }
-    tooltip(ctx, step, hot, W, H, ease((local - MOVE - 0.15) / 0.35), `${i + 1} / ${steps.length}`);
+    tooltip(
+      ctx,
+      step,
+      hot,
+      W,
+      H,
+      ease((local - MOVE - 0.15) / 0.35),
+      `${i + 1} / ${steps.length}`,
+      v,
+    );
 
     // The cursor travels from the previous hotspot to this one, then clicks.
     if (step.hotspot) {

@@ -18,6 +18,7 @@ const ANSWER = {
       title: "Click the shape",
       body: "This is where everything starts.",
       action: "click",
+      target: "the green shape in the middle",
       hotspot: { x: 400, y: 400, w: 200, h: 200 },
       placement: "auto",
       zoom: null,
@@ -30,10 +31,11 @@ const ANSWER = {
       title: "See the result",
       body: "The screen changed.",
       action: "look",
+      target: null,
       hotspot: null,
       placement: "auto",
       zoom: { x: 300, y: 300, w: 400, h: 400 },
-      highlights: [{ x: 400, y: 400, w: 200, h: 200 }],
+      highlights: [{ x: 400, y: 400, w: 200, h: 200, what: "the shape" }],
       redactions: [],
       textEdits: [],
     },
@@ -48,7 +50,19 @@ async function mockNetwork(page: Page, requests: unknown[]) {
     if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     if (req.url().endsWith("/models"))
       return route.fulfill({ json: { data: [{ id: "mock-vision" }] }, headers: cors });
-    requests.push(req.postDataJSON());
+    const body = req.postDataJSON();
+    requests.push(body);
+    // The placement pass: one small request per step, answered with exact boxes.
+    const content = JSON.stringify(ANSWER);
+    const placing = JSON.stringify(body).includes("You locate elements");
+    const answer = placing
+      ? JSON.stringify({
+          items: [
+            { id: 1, boxes: [{ x: 420, y: 420, w: 160, h: 160 }] },
+            { id: 2, boxes: [] },
+          ],
+        })
+      : content;
     await route.fulfill({
       headers: cors,
       json: {
@@ -59,7 +73,7 @@ async function mockNetwork(page: Page, requests: unknown[]) {
         choices: [
           {
             index: 0,
-            message: { role: "assistant", content: JSON.stringify(ANSWER) },
+            message: { role: "assistant", content: answer },
             finish_reason: "stop",
           },
         ],
@@ -117,16 +131,20 @@ test("AI mode: record, generate with a model, share a link, export HTML", async 
   await page.getByRole("button", { name: "Save" }).click();
 
   await page.getByLabel("What should the demo show?").fill("Show the green screen");
+  await page.getByLabel("Text to replace 1").fill("Globex");
+  await page.getByLabel("Replacement 1").fill("Acme");
   await shot(page, "ai-brief");
   await page.getByRole("button", { name: "Generate demo" }).click();
   await expect(page.locator(".step-item")).toHaveCount(2, { timeout: 20_000 });
   await expect(page.getByLabel("Demo title")).toHaveValue("Tour of the green screen");
 
-  // One request: the brief and every screenshot (the first screen, then the two snaps).
-  expect(requests).toHaveLength(1);
-  const body = JSON.stringify(requests[0]);
-  expect(body).toContain("Show the green screen");
-  expect(body.match(/data:image\/jpeg;base64/g)?.length).toBe(3);
+  // The demo request (the brief and every screenshot), then one placement request per step.
+  const bodies = requests.map((r) => JSON.stringify(r));
+  const demo = bodies.find((b) => b.includes("Show the green screen")) ?? "";
+  expect(demo.match(/data:image\/jpeg;base64/g)?.length).toBeGreaterThanOrEqual(3);
+  const placing = bodies.filter((b) => b.includes("You locate elements"));
+  expect(placing).toHaveLength(2);
+  expect(placing.join()).toContain('the text \\"Globex\\"');
 
   await expect(page.locator(".layer-hotspot")).toBeVisible();
   await expect(page.locator(".layer-redaction")).toBeVisible();

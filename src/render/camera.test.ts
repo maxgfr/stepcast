@@ -27,3 +27,17 @@ describe("camera", () => {
     expect(lerpView(FULL_VIEW, b, 1).s).toBeCloseTo(2);
   });
 });
+
+describe("tooltip placement", () => {
+  it("goes where it covers no highlight and stays inside the frame", async () => {
+    const { autoPlacement } = await import("../player/Player");
+    const input = { x: 0.35, y: 0.3, w: 0.3, h: 0.05 };
+    expect(autoPlacement(input)).toBe("bottom");
+    // The list under the input is highlighted: go above instead.
+    expect(autoPlacement(input, [{ x: 0.3, y: 0.36, w: 0.4, h: 0.3 }])).toBe("top");
+    // A target at the very bottom: above.
+    expect(autoPlacement({ x: 0.4, y: 0.92, w: 0.1, h: 0.05 })).toBe("top");
+    // A tall sidebar on the left: to its right.
+    expect(autoPlacement({ x: 0, y: 0.05, w: 0.15, h: 0.9 })).toBe("right");
+  });
+});

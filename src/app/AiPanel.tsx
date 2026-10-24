@@ -20,7 +20,7 @@ function loadBrief(): Brief {
   try {
     const raw = localStorage.getItem(BRIEF_KEY);
     return raw
-      ? { ...DEFAULT_BRIEF, ...(JSON.parse(raw) as Partial<Brief>), goal: "" }
+      ? { ...DEFAULT_BRIEF, ...(JSON.parse(raw) as Partial<Brief>), goal: "", replacements: [] }
       : DEFAULT_BRIEF;
   } catch {
     return DEFAULT_BRIEF;
@@ -30,7 +30,8 @@ export const brief = signal<Brief>(loadBrief());
 function saveBrief(b: Brief) {
   brief.value = b;
   try {
-    localStorage.setItem(BRIEF_KEY, JSON.stringify({ ...b, goal: "" }));
+    // The goal and the replacements belong to one recording: not remembered.
+    localStorage.setItem(BRIEF_KEY, JSON.stringify({ ...b, goal: "", replacements: [] }));
   } catch {
     // Storage may be unavailable; the brief still works for this session.
   }
@@ -560,16 +561,40 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               />
             </Field>
           </div>
-          <Field
-            label="Change text on screen (optional)"
-            hint="e.g. Replace “Globex Corp” with “Acme”, and the user name with “Alex”."
-          >
-            <input
-              class="input"
-              value={b.edits}
-              onInput={(e) => saveBrief({ ...b, edits: e.currentTarget.value })}
-            />
-          </Field>
+          <fieldset class="replace">
+            <legend class="field-label">Change text on screen (optional)</legend>
+            {[...b.replacements, { from: "", to: "" }].map((r, i) => {
+              const set = (patch: Partial<typeof r>) => {
+                const list = [...b.replacements];
+                list[i] = { ...r, ...patch };
+                saveBrief({ ...b, replacements: list.filter((x) => x.from || x.to) });
+              };
+              return (
+                <div class="replace-row" key={i}>
+                  <input
+                    class="input"
+                    placeholder={i === 0 ? "Text on screen, e.g. Globex Corp" : "Text on screen"}
+                    aria-label={`Text to replace ${i + 1}`}
+                    value={r.from}
+                    onInput={(e) => set({ from: e.currentTarget.value })}
+                  />
+                  <span class="muted" aria-hidden="true">
+                    →
+                  </span>
+                  <input
+                    class="input"
+                    placeholder={i === 0 ? "Shown instead, e.g. Acme" : "Shown instead"}
+                    aria-label={`Replacement ${i + 1}`}
+                    value={r.to}
+                    onInput={(e) => set({ to: e.currentTarget.value })}
+                  />
+                </div>
+              );
+            })}
+            <span class="field-hint">
+              Replaced on every screen where it appears, in the pixels of the shared demo.
+            </span>
+          </fieldset>
           <div class="checks">
             <label class="check">
               <input
