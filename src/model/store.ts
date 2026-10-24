@@ -3,6 +3,7 @@
  * small and rewritten on every edit; its images and the recording are Blobs,
  * written once under `<projectId>:<key>` and never copied again.
  */
+import type { Transcript } from "llm-connect";
 import type { Box, Demo } from "./demo";
 
 export interface Frame {
@@ -26,6 +27,13 @@ export interface SideFile {
   offset: number;
 }
 
+export interface Narration extends SideFile {
+  /** Length of the file in seconds. */
+  duration: number;
+  /** Times in seconds into the narration's file (add `offset` for the recording's clock). */
+  transcript: Transcript | null;
+}
+
 export interface Project {
   id: string;
   /** The demo; `step.image` is a blob key, `demo.images` stays empty here. */
@@ -35,6 +43,8 @@ export interface Project {
   recording: string | null;
   /** The camera, recorded next to the screen (projects made before it have none). */
   camera?: SideFile | null;
+  /** The microphone, and what was said once transcribed. */
+  narration?: Narration | null;
   createdAt: number;
   updatedAt: number;
 }

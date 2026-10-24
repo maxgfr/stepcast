@@ -1,6 +1,7 @@
 import { useSignal } from "@preact/signals";
 import { languageName, RESPONSE_LANGUAGES, toLanguageCode } from "llm-connect";
 import { useEffect, useRef } from "preact/hooks";
+import { withVoices } from "../../ai/narration";
 import { clock } from "../../ai/prompts";
 import { frameOf, seek, videoDuration } from "../../capture/import";
 import {
@@ -273,6 +274,49 @@ function Refine({ step }: { step: Step }) {
   );
 }
 
+/** The step's part of the narration: listen to it, or leave the step silent. */
+function StepVoice({ step, onRemove }: { step: Step; onRemove: () => void }) {
+  const playing = useSignal(false);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const key = project.value?.demo.narration;
+  const voice = step.voice;
+  useEffect(() => () => audio.current?.pause(), []);
+  if (!voice || !key) return null;
+  const play = () => {
+    const url = assetUrl(key);
+    if (!url) return;
+    audio.current?.pause();
+    if (playing.value) {
+      playing.value = false;
+      return;
+    }
+    const a = new Audio(url);
+    audio.current = a;
+    a.currentTime = voice.start;
+    a.ontimeupdate = () => {
+      if (a.currentTime >= voice.end) {
+        a.pause();
+        playing.value = false;
+      }
+    };
+    a.onended = () => (playing.value = false);
+    playing.value = true;
+    void a.play().catch(() => (playing.value = false));
+  };
+  return (
+    <Field label="Voice" hint="Your narration over this step, played in the demo and the MP4.">
+      <div class="row">
+        <Button size="sm" icon={playing.value ? "pause" : "play"} onClick={play}>
+          {clock(voice.start)}–{clock(voice.end)}
+        </Button>
+        <Button size="sm" variant="ghost" icon="trash" onClick={onRemove}>
+          Silent step
+        </Button>
+      </div>
+    </Field>
+  );
+}
+
 function StepInspector({ step }: { step: Step }) {
   const set = (patch: Partial<Step>, tag = "") =>
     updateStep(step.id, (s) => ({ ...s, ...patch }), tag);
@@ -295,6 +339,7 @@ function StepInspector({ step }: { step: Step }) {
           onInput={(e) => set({ body: e.currentTarget.value }, "body")}
         />
       </Field>
+      {step.voice && <StepVoice step={step} onRemove={() => set({ voice: null })} />}
       <div class="grid-2">
         <Field label="Action">
           <select
@@ -886,7 +931,8 @@ export function Editor({ id, start }: { id: string; start: boolean }) {
       const pinned = p.frames.filter((f) => f.pinned);
       const pick = pinned.length ? pinned : p.frames.length <= 12 ? p.frames : [];
       if (pick.length) {
-        updateDemo((d) => ({ ...d, steps: pick.map((f) => newStep(f.asset, { time: f.time })) }));
+        const steps = pick.map((f) => newStep(f.asset, { time: f.time }));
+        updateDemo((d) => ({ ...d, steps: withVoices(steps, p.narration) }));
         selectedStep.value = null;
         panel.value = null;
         toast(

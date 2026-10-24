@@ -6,14 +6,22 @@
 import { signal, useSignal } from "@preact/signals";
 import { RESPONSE_LANGUAGES, toLanguageCode } from "llm-connect";
 import { useEffect, useRef } from "preact/hooks";
-import { type Brief, DEFAULT_BRIEF, type FrameNote, pastePrompt } from "../ai/prompts";
+import {
+  defaultEngine,
+  gatherSaid,
+  saidPerFrame,
+  type TranscribeEngine,
+  transcribeNarration,
+  withVoices,
+} from "../ai/narration";
+import { type Brief, clock, DEFAULT_BRIEF, type FrameNote, pastePrompt } from "../ai/prompts";
 import { parseDemoAnswer, stepsFromAnswer } from "../ai/schema";
 import { llm, llmState, loadLlmSettings, modelLabel, savedSettings } from "../ai/settings";
 import { pasteSheet } from "../ai/sheets";
 import type { Demo, Step } from "../model/demo";
-import type { Frame } from "../model/store";
+import { type Frame, getBlob } from "../model/store";
 import { matchEditColors } from "../render/image";
-import { assetUrl, project, selectedStep, updateDemo } from "./state";
+import { assetUrl, project, selectedStep, setTranscript, updateDemo } from "./state";
 import { Button, copyText, errorText, Field, Icon, Modal, toast } from "./ui";
 
 const BRIEF_KEY = "stepcast-brief";
@@ -70,16 +78,123 @@ export function aiFrames(): (FrameNote & { asset: string; url: string })[] {
         width: 0,
         height: 0,
       }));
-  return frames
-    .slice()
-    .sort((a, b) => a.time - b.time)
-    .map((f) => ({
-      asset: f.asset,
-      url: assetUrl(f.asset),
-      time: f.time,
-      pinned: f.pinned,
-      diff: f.diff,
-    }));
+  const sorted = frames.slice().sort((a, b) => a.time - b.time);
+  const said = p.narration?.transcript
+    ? saidPerFrame(
+        p.narration,
+        sorted.map((f) => f.time),
+      )
+    : [];
+  return sorted.map((f, i) => ({
+    asset: f.asset,
+    url: assetUrl(f.asset),
+    time: f.time,
+    pinned: f.pinned,
+    diff: f.diff,
+    ...(said[i] ? { said: said[i] } : {}),
+  }));
+}
+
+/** How the narration is transcribed: the provider's model, or Whisper here (fast or accurate). */
+type Transcriber = "provider" | "device-fast" | "device-accurate";
+const TRANSCRIBER_KEY = "stepcast-transcriber";
+function loadTranscriber(): Transcriber | null {
+  try {
+    const v = localStorage.getItem(TRANSCRIBER_KEY);
+    return v === "provider" || v === "device-fast" || v === "device-accurate" ? v : null;
+  } catch {
+    return null;
+  }
+}
+const transcriber = signal<Transcriber | null>(loadTranscriber());
+function setTranscriber(v: Transcriber) {
+  transcriber.value = v;
+  try {
+    localStorage.setItem(TRANSCRIBER_KEY, v);
+  } catch {
+    // The choice still holds for this session.
+  }
+}
+
+/** Transcribes the open project's narration, once; later calls reuse the transcript. */
+async function ensureTranscript(
+  onProgress: (message: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const p = project.value;
+  if (!p?.narration || p.narration.transcript) return;
+  const blob = await getBlob(p.id, p.narration.key);
+  if (!blob) return;
+  const settings = savedSettings();
+  const choice =
+    transcriber.value ?? (defaultEngine(settings) === "provider" ? "provider" : "device-fast");
+  const engine: TranscribeEngine = choice === "provider" ? "provider" : "device";
+  const transcript = await transcribeNarration(
+    blob,
+    engine,
+    settings,
+    choice === "device-accurate" ? "accurate" : "fast",
+    (pr) =>
+      onProgress(
+        pr.ratio !== undefined ? `${pr.message} ${Math.round(pr.ratio * 100)}%` : pr.message,
+      ),
+    signal,
+  );
+  setTranscript(transcript);
+}
+
+function NarrationField() {
+  const p = project.value;
+  const busy = useSignal("");
+  if (!p?.narration) return null;
+  const n = p.narration;
+  const settings = llmState.value.saved ? savedSettings() : null;
+  const providerOk = defaultEngine(settings) === "provider";
+  const value = transcriber.value ?? (providerOk ? "provider" : "device-fast");
+  const words = n.transcript?.words.length ?? 0;
+  const run = async () => {
+    try {
+      await ensureTranscript((m) => (busy.value = m));
+      toast("Narration transcribed.", "success");
+    } catch (err) {
+      toast(errorText(err), "error", 8000);
+    } finally {
+      busy.value = "";
+    }
+  };
+  return (
+    <Field
+      label="Your narration"
+      hint={
+        n.transcript
+          ? `${clock(n.duration)} transcribed: ${words} word${words === 1 ? "" : "s"}. The AI writes the steps from them, and each step plays its part.`
+          : `${clock(n.duration)} recorded. It is transcribed before the demo is written; each step then plays its part.`
+      }
+    >
+      <div class="row">
+        <Icon name="mic" size={16} />
+        <select
+          class="input"
+          aria-label="Transcribe with"
+          value={value}
+          disabled={!!busy.value}
+          onChange={(e) => setTranscriber(e.currentTarget.value as Transcriber)}
+        >
+          <option value="provider" disabled={!providerOk}>
+            Your AI provider{providerOk ? "" : " (no speech-to-text)"}
+          </option>
+          <option value="device-fast">This device: Whisper, fast (80 MB, once)</option>
+          <option value="device-accurate">This device: Whisper, accurate (600 MB, a GPU)</option>
+        </select>
+        {!n.transcript && (
+          <Button size="sm" disabled={!!busy.value} onClick={() => void run()}>
+            {busy.value ? "Transcribing…" : "Transcribe now"}
+          </Button>
+        )}
+      </div>
+      {busy.value && <span class="field-hint">{busy.value}</span>}
+    </Field>
+  );
 }
 
 async function applyResult(
@@ -92,7 +207,8 @@ async function applyResult(
   },
   keep: boolean,
 ) {
-  const colored = await Promise.all(steps.map((s) => matchEditColors(s, assetUrl(s.image))));
+  const voiced = withVoices(steps, project.value?.narration);
+  const colored = await Promise.all(voiced.map((s) => matchEditColors(s, assetUrl(s.image))));
   updateDemo((d): Demo => {
     const untitled = !d.title || d.title === "Untitled demo";
     return {
@@ -306,10 +422,13 @@ function PasteMode({ onDone }: { onDone: () => void }) {
       const pinned = all.filter((f) => f.pinned);
       const pool = pinned.length >= 2 ? pinned : all;
       const n = Math.min(10, Math.max(b.maxSteps + 2, 4));
-      if (pool.length <= n) return pool;
-      return Array.from(
-        { length: n },
-        (_, i) => pool[Math.floor(((i + 0.5) * pool.length) / n)] as (typeof pool)[number],
+      if (pool.length <= n) return gatherSaid(all, pool);
+      return gatherSaid(
+        all,
+        Array.from(
+          { length: n },
+          (_, i) => pool[Math.floor(((i + 0.5) * pool.length) / n)] as (typeof pool)[number],
+        ),
       );
     })(),
   ).current;
@@ -457,11 +576,12 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     started.value = Date.now();
     progress.value = "Preparing the screenshots…";
     try {
+      await ensureTranscript((m) => (progress.value = m), ctrl.signal);
       const { generateDemo } = await import("../ai/run");
       const res = await generateDemo(
         s,
         b,
-        frames,
+        aiFrames(),
         (p) => (progress.value = p.message),
         ctrl.signal,
       );
@@ -520,6 +640,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               onInput={(e) => saveBrief({ ...b, goal: e.currentTarget.value })}
             />
           </Field>
+          <NarrationField />
           <div class="grid-2">
             <Field label="Audience">
               <input

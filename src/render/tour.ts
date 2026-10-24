@@ -37,15 +37,20 @@ export type VideoText = "tooltips" | "subtitles";
 
 export interface TourOptions {
   text?: VideoText;
+  /** Play each step's part of the narration (default true): a shot then lasts as long as it. */
+  voice?: boolean;
 }
 
 const MOVE = 0.8;
+/** When a step's voice starts in its shot: as the camera settles. */
+export const VOICE_AT = MOVE * 0.6;
 
 function words(s: string): number {
   return s.trim() ? s.trim().split(/\s+/).length : 0;
 }
 
-export function timeline(demo: Demo): { shots: Shot[]; duration: number } {
+export function timeline(demo: Demo, voice = true): { shots: Shot[]; duration: number } {
+  const spoken = voice && !!demo.narration;
   const shots: Shot[] = [];
   let t = 0;
   if (demo.intro) {
@@ -54,7 +59,9 @@ export function timeline(demo: Demo): { shots: Shot[]; duration: number } {
   }
   demo.steps.forEach((s, i) => {
     const read = (words(s.title) + words(s.body)) / 3.2;
-    const d = MOVE + Math.min(7, Math.max(2.4, read)) + (s.hotspot ? 0.6 : 0);
+    const shown = MOVE + Math.min(7, Math.max(2.4, read)) + (s.hotspot ? 0.6 : 0);
+    const said = spoken && s.voice ? VOICE_AT + (s.voice.end - s.voice.start) + 0.5 : 0;
+    const d = Math.max(shown, said);
     shots.push({ kind: "step", start: t, duration: d, index: i });
     t += d;
   });
@@ -79,6 +86,7 @@ export async function prepareTour(
   options: TourOptions = {},
 ): Promise<Tour> {
   const text = options.text ?? "tooltips";
+  const voice = options.voice ?? true;
   const images: HTMLCanvasElement[] = [];
   let width = 0;
   let height = 0;
@@ -97,7 +105,7 @@ export async function prepareTour(
   }
   if (!width) throw new Error("This demo has no steps.");
   const frame = demo.theme.frame;
-  if (!frame) return { demo, ...timeline(demo), images, width, height, framed: null, text };
+  if (!frame) return { demo, ...timeline(demo, voice), images, width, height, framed: null, text };
   // The film is the frame: the scene keeps its size, the padding and the bar go around it.
   const metrics = frameMetrics(frame, width / height);
   const W = Math.round(width / (1 - 2 * metrics.pad)) & ~1;
@@ -105,7 +113,7 @@ export async function prepareTour(
   const H = (inner.y + Math.round((height / width) * inner.w) + inner.x + 1) & ~1;
   return {
     demo,
-    ...timeline(demo),
+    ...timeline(demo, voice),
     images,
     width: W,
     height: H,

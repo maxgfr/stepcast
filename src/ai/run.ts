@@ -26,6 +26,7 @@ import {
 import { z } from "zod";
 import type { Demo, Step } from "../model/demo";
 import { applyGrounding, groundPrompt, groundSchema, targetsOf } from "./ground";
+import { gatherSaid } from "./narration";
 import {
   activeReplacements,
   type Brief,
@@ -247,7 +248,11 @@ export async function annotate(
   const answer = await call(
     settings,
     demoAnswerSchema,
-    demoInstructions(brief),
+    demoInstructions(
+      brief,
+      false,
+      frames.some((f) => f.said),
+    ),
     [{ role: "user", content } as ModelMessage],
     "medium",
     signal,
@@ -283,7 +288,7 @@ export async function generateDemo(
       phase: "choose",
       message: `Choosing the key screens among ${pool.length} frames…`,
     });
-    chosen = await chooseFrames(settings, brief, pool, signal);
+    chosen = gatherSaid(frames, await chooseFrames(settings, brief, pool, signal));
   }
   onProgress({
     phase: "annotate",

@@ -11,7 +11,18 @@
 import { type Demo, parseDemo } from "../model/demo";
 
 const MAGIC = [0x53, 0x43, 0x42, 0x31]; // "SCB1"
-const IMAGE_TYPES = new Set(["image/webp", "image/png", "image/jpeg", "image/gif", "image/avif"]);
+const MEDIA_TYPES = new Set([
+  "image/webp",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/avif",
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/wav",
+]);
 
 interface Manifest {
   demo: Demo;
@@ -104,8 +115,8 @@ export async function decodeBundle(text: string): Promise<DecodedBundle> {
   let off = 8 + len;
   for (const a of manifest.assets ?? []) {
     if (off + a.size > buf.length) throw new Error("This link is damaged or incomplete.");
-    // Only image types: these blobs become object URLs on this origin.
-    const type = IMAGE_TYPES.has(a.type) ? a.type : "application/octet-stream";
+    // Only image and audio types: these blobs become object URLs on this origin.
+    const type = MEDIA_TYPES.has(a.type.split(";")[0] ?? "") ? a.type : "application/octet-stream";
     blobs[a.key] = new Blob([buf.slice(off, off + a.size)], { type });
     off += a.size;
   }

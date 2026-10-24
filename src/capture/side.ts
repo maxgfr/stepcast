@@ -54,7 +54,7 @@ export class SideRecorder {
     const mimeType = pickMime(kind);
     const recorder = new MediaRecorder(stream, {
       ...(mimeType ? { mimeType } : {}),
-      ...(kind === "camera" ? { videoBitsPerSecond: 1_000_000 } : { audioBitsPerSecond: 64_000 }),
+      ...(kind === "camera" ? { videoBitsPerSecond: 1_000_000 } : { audioBitsPerSecond: 32_000 }),
     });
     const side = new SideRecorder(kind, stream, recorder, offset());
     recorder.start(1000);

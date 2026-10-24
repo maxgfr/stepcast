@@ -22,6 +22,8 @@ const duplicates = signal(0);
 let recorder: ScreenRecorder | null = null;
 /** The camera, recorded into its own file for the video exports' bubble. */
 const camera = signal<SideRecorder | null>(null);
+/** The microphone: what you say while recording, transcribed for the AI and played over the steps. */
+const mic = signal<SideRecorder | null>(null);
 let pipWindow: Window | null = null;
 let ticker: ReturnType<typeof setInterval> | undefined;
 
@@ -44,9 +46,11 @@ function togglePause(): void {
   if (recorder.paused) {
     recorder.resume();
     camera.value?.resume();
+    mic.value?.resume();
   } else {
     recorder.pause();
     camera.value?.pause();
+    mic.value?.pause();
   }
   paused.value = recorder.paused;
 }
@@ -61,15 +65,28 @@ async function stop(title: string): Promise<void> {
     const rec = recorder;
     recorder = null;
     const cam = camera.value;
+    const voice = mic.value;
+    const total = rec.elapsed();
     camera.value = null;
-    const [video, cameraTake] = await Promise.all([rec.stop(), cam?.stop() ?? null]);
+    mic.value = null;
+    const [video, cameraTake, narration] = await Promise.all([
+      rec.stop(),
+      cam?.stop() ?? null,
+      voice?.stop() ?? null,
+    ]);
     const frames = shots.value;
     if (frames.length === 0) {
       toast("Nothing was captured. Try again, and click through a few screens.", "error");
       status.value = "idle";
       return;
     }
-    const id = await createProject(title, frames, video, false, { camera: cameraTake });
+    const id = await createProject(title, frames, video, false, {
+      camera: cameraTake,
+      narration: narration && {
+        ...narration,
+        duration: Math.max(0, total - narration.offset),
+      },
+    });
     for (const s of frames) URL.revokeObjectURL(s.url);
     shots.value = [];
     status.value = "idle";
@@ -130,6 +147,7 @@ export function Record() {
   const title = useSignal("Untitled demo");
   const audio = useSignal(false);
   const withCamera = useSignal(false);
+  const withMic = useSignal(false);
   const dense = useSignal(true);
   const pipOpen = useSignal(false);
   const canPip = Boolean(docPip());
@@ -166,6 +184,15 @@ export function Record() {
             else void side.stop();
           })
           .catch(() => toast("The camera is not available: recording the screen only.", "error"));
+      }
+      if (withMic.value) {
+        const screen = recorder;
+        void SideRecorder.start("microphone", () => screen.elapsed())
+          .then((side) => {
+            if (recorder === screen) mic.value = side;
+            else void side.stop();
+          })
+          .catch(() => toast("The microphone is not available: no narration.", "error"));
       }
       elapsed.value = 0;
       ticker = setInterval(() => {
@@ -223,6 +250,15 @@ export function Record() {
           <label class="check">
             <input
               type="checkbox"
+              checked={withMic.value}
+              onChange={(e) => (withMic.value = e.currentTarget.checked)}
+            />
+            Narrate with my microphone: the AI writes the steps from what you say, and the demo can
+            play your voice
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
               checked={dense.value}
               onChange={(e) => (dense.value = e.currentTarget.checked)}
             />
@@ -260,7 +296,7 @@ export function Record() {
               ? "Saving…"
               : paused.value
                 ? "Paused"
-                : `Recording · ${shots.value.length} screenshot${shots.value.length === 1 ? "" : "s"}${duplicates.value ? ` · ${duplicates.value} duplicate${duplicates.value === 1 ? "" : "s"} skipped` : ""}`}
+                : `Recording · ${shots.value.length} screenshot${shots.value.length === 1 ? "" : "s"}${duplicates.value ? ` · ${duplicates.value} duplicate${duplicates.value === 1 ? "" : "s"} skipped` : ""}${mic.value ? " · narrating" : ""}`}
           </span>
         </div>
         {camera.value && (
