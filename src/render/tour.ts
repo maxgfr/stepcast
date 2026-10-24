@@ -29,6 +29,14 @@ export interface Tour {
   height: number;
   /** With a frame: its sizes, and the canvas the scene is drawn on before going into it. */
   framed: { metrics: FrameMetrics; scene: HTMLCanvasElement } | null;
+  /** How each step's text shows: a tooltip by the hotspot, or a subtitle at the bottom. */
+  text: VideoText;
+}
+
+export type VideoText = "tooltips" | "subtitles";
+
+export interface TourOptions {
+  text?: VideoText;
 }
 
 const MOVE = 0.8;
@@ -55,11 +63,22 @@ export function timeline(demo: Demo): { shots: Shot[]; duration: number } {
   return { shots, duration: t };
 }
 
+/** Each step's text, timed as the film shows it: once the camera has arrived, until the cut. */
+export function subtitleCues(demo: Demo): { text: string; start: number; end: number }[] {
+  return timeline(demo).shots.flatMap((shot) => {
+    const step = shot.kind === "step" ? demo.steps[shot.index] : undefined;
+    const text = step ? [step.title, step.body].filter((s) => s.trim()).join("\n") : "";
+    return text ? [{ text, start: shot.start + MOVE, end: shot.start + shot.duration }] : [];
+  });
+}
+
 export async function prepareTour(
   demo: Demo,
   source: (key: string) => Promise<Blob | null>,
   maxWidth: number,
+  options: TourOptions = {},
 ): Promise<Tour> {
+  const text = options.text ?? "tooltips";
   const images: HTMLCanvasElement[] = [];
   let width = 0;
   let height = 0;
@@ -78,7 +97,7 @@ export async function prepareTour(
   }
   if (!width) throw new Error("This demo has no steps.");
   const frame = demo.theme.frame;
-  if (!frame) return { demo, ...timeline(demo), images, width, height, framed: null };
+  if (!frame) return { demo, ...timeline(demo), images, width, height, framed: null, text };
   // The film is the frame: the scene keeps its size, the padding and the bar go around it.
   const metrics = frameMetrics(frame, width / height);
   const W = Math.round(width / (1 - 2 * metrics.pad)) & ~1;
@@ -91,6 +110,7 @@ export async function prepareTour(
     width: W,
     height: H,
     framed: { metrics, scene: makeCanvas(width, height) },
+    text,
   };
 }
 
@@ -203,6 +223,51 @@ function card(
     ctx.fillStyle = "#fff";
     ctx.textBaseline = "middle";
     ctx.fillText(button, W / 2, ty + cw * 0.03 + bh / 2);
+  }
+  ctx.restore();
+}
+
+/** The step's title and text as a subtitle: centered, on a dark band near the bottom. */
+function subtitle(ctx: CanvasRenderingContext2D, step: Step, W: number, H: number, k: number) {
+  if (k <= 0 || (!step.title && !step.body)) return;
+  const size = Math.max(14, Math.min(W, H * 1.6) * 0.026);
+  const max = W * 0.82;
+  ctx.save();
+  ctx.font = `650 ${size}px system-ui, sans-serif`;
+  const tl = step.title ? wrap(ctx, step.title, max) : [];
+  ctx.font = `400 ${size * 0.9}px system-ui, sans-serif`;
+  const bl = step.body ? wrap(ctx, step.body, max) : [];
+  const lines = [
+    ...tl.map((text) => ({ text, font: `650 ${size}px system-ui, sans-serif`, h: size * 1.3 })),
+    ...bl.map((text) => ({
+      text,
+      font: `400 ${size * 0.9}px system-ui, sans-serif`,
+      h: size * 1.25,
+    })),
+  ];
+  let width = 0;
+  for (const l of lines) {
+    ctx.font = l.font;
+    width = Math.max(width, ctx.measureText(l.text).width);
+  }
+  const padX = size * 0.8;
+  const padY = size * 0.5;
+  const bh = lines.reduce((s, l) => s + l.h, 0) + padY * 2;
+  const bw = width + padX * 2;
+  const y = H - bh - H * 0.06 + (1 - k) * 8;
+  ctx.globalAlpha = k;
+  ctx.fillStyle = "rgba(10, 8, 20, 0.78)";
+  ctx.beginPath();
+  ctx.roundRect((W - bw) / 2, y, bw, bh, size * 0.45);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  let ty = y + padY;
+  for (const l of lines) {
+    ctx.font = l.font;
+    ctx.fillText(l.text, W / 2, ty + (l.h - size) / 2);
+    ty += l.h;
   }
   ctx.restore();
 }
@@ -407,16 +472,9 @@ function scene(
       ctx.stroke();
       ctx.restore();
     }
-    tooltip(
-      ctx,
-      step,
-      hot,
-      W,
-      H,
-      ease((local - MOVE - 0.15) / 0.35),
-      `${i + 1} / ${steps.length}`,
-      v,
-    );
+    const shown = ease((local - MOVE - 0.15) / 0.35);
+    if (tour.text === "subtitles") subtitle(ctx, step, W, H, shown);
+    else tooltip(ctx, step, hot, W, H, shown, `${i + 1} / ${steps.length}`, v);
 
     // The cursor travels from the previous hotspot to this one, then clicks.
     if (step.hotspot) {

@@ -1,5 +1,6 @@
 import { useSignal } from "@preact/signals";
 import { useEffect, useRef } from "preact/hooks";
+import type { VideoText } from "../render/tour";
 import { encodeBundle } from "../share/bundle";
 import {
   download,
@@ -8,6 +9,7 @@ import {
   exportHtml,
   exportJson,
   exportVideo,
+  exportVtt,
   fileName,
   gistLink,
   playLink,
@@ -56,6 +58,7 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   const token = useSignal("");
   const busy = useSignal<string | null>(null);
   const ratio = useSignal(0);
+  const videoText = useSignal<VideoText>("tooltips");
   const abort = useRef<AbortController | null>(null);
   const p = project.value;
 
@@ -227,6 +230,7 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                       getAssetBlob,
                       (r) => (ratio.value = r),
                       signal,
+                      { text: videoText.value },
                     );
                     download(
                       blob,
@@ -243,7 +247,9 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                 onClick={() =>
                   void task("Rendering the GIF…", async (signal) =>
                     download(
-                      await exportGif(demo, getAssetBlob, (r) => (ratio.value = r), signal),
+                      await exportGif(demo, getAssetBlob, (r) => (ratio.value = r), signal, {
+                        text: videoText.value,
+                      }),
                       fileName(demo.title, "gif"),
                     ),
                   )
@@ -262,6 +268,34 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
               >
                 Project JSON
               </Button>
+              <Button
+                icon="file"
+                disabled={!!busy.value}
+                onClick={() => download(exportVtt(demo), fileName(demo.title, "vtt"))}
+              >
+                Subtitles (.vtt)
+              </Button>
+            </div>
+            <div class="row video-text">
+              <span class="small muted">Text in the MP4 and GIF</span>
+              <fieldset class="segmented" aria-label="Text in the MP4 and GIF">
+                {(
+                  [
+                    ["tooltips", "Tooltips"],
+                    ["subtitles", "Subtitles"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={videoText.value === value}
+                    class={videoText.value === value ? "is-on" : ""}
+                    onClick={() => (videoText.value = value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </fieldset>
             </div>
             <p class="muted small">
               The HTML file plays offline, from disk or any host. The JSON keeps everything editable
