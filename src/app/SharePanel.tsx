@@ -56,13 +56,20 @@ function CopyRow({ value, label }: { value: string; label: string }) {
 }
 
 export function SharePanel({ onClose }: { onClose: () => void }) {
-  const link = useSignal<{ url: string; size: number; fits: boolean } | null>(null);
+  const link = useSignal<{
+    url: string;
+    size: number;
+    fits: boolean;
+    /** The demo has a narration the link could not carry. */
+    voiceLeft: boolean;
+  } | null>(null);
   const gist = useSignal("");
   const token = useSignal("");
   const busy = useSignal<string | null>(null);
   const ratio = useSignal(0);
   const videoText = useSignal<VideoText>("tooltips");
   const bubble = useSignal(true);
+  const voice = useSignal(true);
   const corner = useSignal<BubbleCorner>("bottom-right");
   const abort = useRef<AbortController | null>(null);
   const p = project.value;
@@ -75,12 +82,14 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   const demo = p.demo;
   const empty = demo.steps.length === 0;
   const camera = p.camera ?? null;
+  const spoken = !!demo.narration && demo.steps.some((s) => s.voice);
 
   /** What the MP4 and GIF show besides the demo: the text mode, and the camera bubble. */
   const videoOptions = async (): Promise<VideoOptions> => {
     const blob = camera && bubble.value ? await getBlob(p.id, camera.key) : null;
     return {
       text: videoText.value,
+      voice: voice.value,
       camera: blob && camera ? { blob, offset: camera.offset, corner: corner.value } : null,
     };
   };
@@ -103,7 +112,12 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   const makeLink = () =>
     task("Packing the demo into a link…", async () => {
       const res = await bundleForLink(demo, getAssetBlob);
-      link.value = { url: playLink(res.bundle), size: res.bundle.length, fits: res.fits };
+      link.value = {
+        url: playLink(res.bundle),
+        size: res.bundle.length,
+        fits: res.fits,
+        voiceLeft: !!demo.narration && demo.steps.some((s) => s.voice) && !res.voice,
+      };
     });
 
   const makeGist = () =>
@@ -146,6 +160,9 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                       ? "Works pasted into a browser; some chat apps cut long links. A Gist link is short."
                       : "Short enough for anywhere."
                     : `Too big for a link (over ${kb(LINK_LIMIT)}). Use a Gist link or an HTML export.`}
+                  {link.value.fits && link.value.voiceLeft
+                    ? " Your voice did not fit: the Gist link and the HTML file keep it."
+                    : ""}
                 </p>
                 {link.value.fits && (
                   <a
@@ -316,6 +333,16 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                 ))}
               </fieldset>
             </div>
+            {spoken && (
+              <label class="check video-text">
+                <input
+                  type="checkbox"
+                  checked={voice.value}
+                  onChange={(e) => (voice.value = e.currentTarget.checked)}
+                />
+                Your voice in the MP4 (each shot lasts as long as its part)
+              </label>
+            )}
             {camera && (
               <div class="row video-text">
                 <label class="check">

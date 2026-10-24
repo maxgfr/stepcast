@@ -10,7 +10,7 @@
  * inline script or a reference to another origin.
  */
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { demoJsonSchema } from "../src/model/demo";
 
 const ROOT = resolve(import.meta.dir, "..");
@@ -107,6 +107,27 @@ export async function build(opts: BuildOptions = {}): Promise<{ outdir: string; 
     worker.outputs.find((o) => o.kind === "entry-point") ?? fail("no worker output");
   const workerUrl = `./${relative(outdir, workerOut.path).split("\\").join("/")}`;
 
+  // 1b. Whisper's worker (transcribing the narration on the device), and the one
+  // onnxruntime build transformers.js loads (WebGPU and WebAssembly), served from here.
+  const whisper = await Bun.build({
+    entrypoints: [join(ROOT, "src/workers/whisper.ts")],
+    outdir,
+    minify,
+    target: "browser",
+    format: "esm",
+    naming: { entry: "assets/[name]-[hash].[ext]", chunk: "assets/[name]-[hash].[ext]" },
+    define: env,
+  });
+  assertOk(whisper, "whisper worker build");
+  const whisperOut =
+    whisper.outputs.find((o) => o.kind === "entry-point") ?? fail("no whisper worker output");
+  const whisperUrl = `./${relative(outdir, whisperOut.path).split("\\").join("/")}`;
+  const transformers = dirname(Bun.resolveSync("@huggingface/transformers/package.json", ROOT));
+  const ort = join(dirname(Bun.resolveSync("onnxruntime-web/package.json", transformers)), "dist");
+  await mkdir(join(outdir, "ort"), { recursive: true });
+  for (const f of ["ort-wasm-simd-threaded.asyncify.mjs", "ort-wasm-simd-threaded.asyncify.wasm"])
+    await cp(join(ort, f), join(outdir, "ort", f));
+
   // 2. The app.
   const app = await Bun.build({
     entrypoints: [join(ROOT, "index.html")],
@@ -120,7 +141,11 @@ export async function build(opts: BuildOptions = {}): Promise<{ outdir: string; 
       chunk: "assets/[name]-[hash].[ext]",
       asset: "assets/[name]-[hash].[ext]",
     },
-    define: { ...env, __CLOCK_WORKER_URL__: JSON.stringify(workerUrl) },
+    define: {
+      ...env,
+      __CLOCK_WORKER_URL__: JSON.stringify(workerUrl),
+      __WHISPER_WORKER_URL__: JSON.stringify(whisperUrl),
+    },
   });
   assertOk(app, "app build");
 

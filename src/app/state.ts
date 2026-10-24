@@ -3,6 +3,7 @@
  * edits saved to IndexedDB shortly after they happen, and an undo history.
  */
 import { batch, computed, signal } from "@preact/signals";
+import type { Transcript } from "llm-connect";
 import type { CapturedFrame } from "../capture/recorder";
 import type { SideTake } from "../capture/side";
 import { type Demo, emptyDemo, newId, newStep, type Step } from "../model/demo";
@@ -10,6 +11,7 @@ import {
   type Frame,
   getBlob,
   getProject,
+  type Narration,
   type Project,
   putBlob,
   type SideFile,
@@ -31,6 +33,7 @@ export function assetUrl(key: string): string {
 
 async function loadAssets(p: Project): Promise<void> {
   const keys = new Set([...p.frames.map((f) => f.asset), ...p.demo.steps.map((s) => s.image)]);
+  if (p.demo.narration) keys.add(p.demo.narration);
   for (const key of keys) {
     if (urls.has(key)) continue;
     const blob = await getBlob(p.id, key);
@@ -79,7 +82,7 @@ export async function createProject(
   frames: CapturedFrame[],
   recording: Blob | null,
   asSteps = false,
-  sides: { camera?: SideTake | null } = {},
+  sides: { camera?: SideTake | null; narration?: (SideTake & { duration: number }) | null } = {},
 ): Promise<string> {
   const id = newId("p");
   const stored: Frame[] = [];
@@ -106,7 +109,18 @@ export async function createProject(
     camera = { key: "camera", offset: sides.camera.offset };
     await putBlob(id, camera.key, sides.camera.blob);
   }
+  let narration: Narration | null = null;
+  if (sides.narration) {
+    narration = {
+      key: "narration",
+      offset: sides.narration.offset,
+      duration: sides.narration.duration,
+      transcript: null,
+    };
+    await putBlob(id, narration.key, sides.narration.blob);
+  }
   const demo = emptyDemo(title);
+  if (narration) demo.narration = narration.key;
   if (asSteps) demo.steps = stored.map((f) => newStep(f.asset, { time: f.time }));
   const now = Date.now();
   await saveProject({
@@ -115,6 +129,7 @@ export async function createProject(
     frames: stored,
     recording: rec,
     camera,
+    narration,
     createdAt: now,
     updatedAt: now,
   });
@@ -191,6 +206,14 @@ export function updateDemo(fn: (d: Demo) => Demo, tag = ""): void {
   scheduleSave();
 }
 
+/** Keeps the narration's transcript with the project (not part of the demo: no undo). */
+export function setTranscript(transcript: Transcript): void {
+  const p = project.value;
+  if (!p?.narration) return;
+  project.value = { ...p, narration: { ...p.narration, transcript } };
+  scheduleSave();
+}
+
 export function updateStep(id: string, fn: (s: Step) => Step, tag = ""): void {
   updateDemo(
     (d) => ({ ...d, steps: d.steps.map((s) => (s.id === id ? fn(s) : s)) }),
@@ -237,6 +260,7 @@ export const playableDemo = computed<Demo | null>(() => {
   void assetVersion.value;
   const images: Record<string, string> = {};
   for (const s of p.demo.steps) images[s.image] = urls.get(s.image) ?? "";
+  if (p.demo.narration) images[p.demo.narration] = urls.get(p.demo.narration) ?? "";
   return { ...p.demo, images };
 });
 
@@ -252,6 +276,8 @@ export async function createProjectFromDemo(
     const asset = newId("a");
     keyMap.set(key, asset);
     await putBlob(id, asset, blob);
+    // The narration is kept, but it is no screenshot.
+    if (key === demo.narration) continue;
     const step = demo.steps.find((s) => s.image === key);
     frames.push({
       id: newId("f"),
@@ -269,7 +295,12 @@ export async function createProjectFromDemo(
   const now = Date.now();
   await saveProject({
     id,
-    demo: { ...demo, steps, images: {} },
+    demo: {
+      ...demo,
+      steps,
+      narration: demo.narration ? (keyMap.get(demo.narration) ?? null) : null,
+      images: {},
+    },
     frames,
     recording: null,
     createdAt: now,

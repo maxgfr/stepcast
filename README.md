@@ -20,7 +20,8 @@ recording a to-do app, AI mode with Claude, review, share)
    having: the screen just **before** each change (the cursor resting on what is about to be
    clicked), the screen **after** it settles, and one per second while it keeps moving (scrolling,
    typing). Each new screenshot is compared with all the ones already taken, so going back to a
-   screen never stores it twice. You can record your camera too, into its own file, for a bubble in the videos. **Snap step** saves the current screen right away, and the
+   screen never stores it twice. You can record your camera too, into its own file, for a bubble in the videos, and **narrate**
+   with your microphone: say what you do as you do it. **Snap step** saves the current screen right away, and the
    floating controls (Document Picture-in-Picture) stay on top of your other windows. You can also
    import a video (same detector) or a set of screenshots.
 2. **Let AI direct** (AI mode). Say in one sentence what the demo should show, plus the audience,
@@ -67,6 +68,10 @@ stepcast file** to review, polish and share it.
 - The page's Content-Security-Policy allows no inline script, no eval and no third-party script.
   It can connect only to `https:` APIs (your AI provider, the model catalog, GitHub when you
   publish a Gist) and to local model servers.
+- Your narration is transcribed by your provider's speech-to-text model (OpenAI, Gemini,
+  Mistral, Groq) or by Whisper on this device (WebGPU or WebAssembly, downloaded once from Hugging
+  Face), as you choose. The AI gets what you said around each screenshot and writes the steps from
+  it; each step keeps its part of your voice, played in the demo and laid on the MP4.
 - Recordings and screenshots never leave the device, except the screenshots you send to the AI
   provider you chose, and what you choose to share.
 - Blurs and text replacements are baked into the images of every share link, Gist and export.

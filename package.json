@@ -21,6 +21,7 @@
     "@ai-sdk/mistral": "4.0.71",
     "@ai-sdk/openai": "4.0.101",
     "@ai-sdk/openai-compatible": "3.0.77",
+    "@huggingface/transformers": "4.3.1",
     "@preact/signals": "2.11.3",
     "ai": "7.0.152",
     "gifenc": "1.0.3",
