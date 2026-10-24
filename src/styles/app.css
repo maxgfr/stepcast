@@ -323,6 +323,43 @@ select.input {
   background: none;
   cursor: pointer;
 }
+.frame-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.frame-swatch {
+  width: 32px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.frame-swatch.is-active {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.frame-none {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--surface-2, transparent) 0 4px,
+    var(--line) 4px 5px
+  );
+}
+.frame-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+.frame-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
 .segmented {
   border: 0;
   min-width: 0;
@@ -1728,4 +1765,7 @@ body:has(.play-embed) {
   .editor-bar {
     flex-wrap: wrap;
   }
+}
+.frame-range input {
+  accent-color: var(--accent);
 }

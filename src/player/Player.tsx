@@ -3,9 +3,11 @@
  * matters, a pulsing hotspot to click and a tooltip that explains it. Used in
  * the editor's preview, on share links, in embeds and in exported HTML files.
  */
+import type { ComponentChildren } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { Box, Demo, Placement, Step } from "../model/demo";
+import type { Box, Demo, Frame, Placement, Step } from "../model/demo";
 import { cssTransform, mapBox, type View, viewFor } from "../render/camera";
+import { backgroundCss, frameMetrics, isLightBackground } from "../render/frame";
 import { StepImage } from "../render/StepImage";
 import { isRtl, playerLabels } from "./i18n";
 
@@ -20,6 +22,53 @@ export interface PlayerProps {
 }
 
 type Phase = "intro" | "step" | "end";
+
+/**
+ * The demo's frame around the stage: the background with its padding, then a
+ * window (rounded, shadowed, with an optional bar). Sizes are in units of the
+ * frame's width (`cqw` inside, % for the padding), as the videos draw them.
+ * `fit`: the embed's box, to fill as large as the frame's shape allows.
+ */
+function Framed({
+  frame,
+  aspect,
+  fit,
+  children,
+}: {
+  frame: Frame | null;
+  aspect: number;
+  fit: { w: number; h: number } | null;
+  children: ComponentChildren;
+}) {
+  if (!frame) return <>{children}</>;
+  const m = frameMetrics(frame, aspect);
+  const width = fit?.w && fit.h ? Math.floor(Math.min(fit.w, fit.h * m.aspect)) : null;
+  const inner = 1 - 2 * m.pad;
+  return (
+    <div
+      class="sc-backdrop"
+      style={{
+        background: backgroundCss(frame.background),
+        padding: width ? `${m.pad * width}px` : `${m.pad * 100}%`,
+        ...(width ? { width: `${width}px` } : {}),
+      }}
+    >
+      <div
+        class={`sc-window${frame.shadow ? " sc-window-shadow" : ""}${isLightBackground(frame.background) ? " sc-window-light" : ""}`}
+        style={{ borderRadius: `${(m.radius / inner) * 100}cqw` }}
+      >
+        {frame.window === "macos" && (
+          <div class="sc-winbar" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
 
 const BRAND_URL = "https://maxgfr.github.io/stepcast/";
 
@@ -296,112 +345,114 @@ export function Player({
       lang={demo.language || "en"}
       dir={isRtl(demo.language) ? "rtl" : "ltr"}
     >
-      <div
-        class="sc-frame"
-        style={{
-          aspectRatio: String(aspect),
-          // An embed fills its iframe: as large as fits, whatever the iframe's shape.
-          ...(mode === "embed" && size.w && size.h
-            ? { width: `${Math.floor(Math.min(size.w, size.h * aspect))}px` }
-            : {}),
-        }}
-      >
-        <StepScene
-          key={step.id}
-          step={step}
-          src={demo.images[step.image] ?? ""}
-          view={view}
-          onAspect={setAspect}
+      <Framed frame={demo.theme.frame} aspect={aspect} fit={mode === "embed" ? size : null}>
+        <div
+          class="sc-frame"
+          style={{
+            aspectRatio: String(aspect),
+            // An embed fills its iframe: as large as fits, whatever the iframe's shape.
+            ...(mode === "embed" && size.w && size.h && !demo.theme.frame
+              ? { width: `${Math.floor(Math.min(size.w, size.h * aspect))}px` }
+              : {}),
+          }}
         >
-          {phase === "step" && hot && (
-            <button
-              type="button"
-              class="sc-hotspot"
-              style={{
-                left: `${hot.x * 100}%`,
-                top: `${hot.y * 100}%`,
-                width: `${hot.w * 100}%`,
-                height: `${hot.h * 100}%`,
-              }}
-              aria-label={step.title ? `${t.next}: ${step.title}` : t.nextStep}
-              onClick={() => go(1)}
-            >
-              <span class="sc-beacon" />
-            </button>
-          )}
-          {phase === "step" && (
-            <div
-              ref={tip}
-              class={`sc-tip sc-tip-${hot ? placement : "free"} ${hot && hot.y + hot.h / 2 > 0.5 ? "sc-tip-low" : ""}`}
-              style={tooltipStyle(hot, placement)}
-              role="dialog"
-              aria-live="polite"
-            >
-              {step.title && <div class="sc-tip-title">{step.title}</div>}
-              {step.body && <div class="sc-tip-body">{step.body}</div>}
-              <div class="sc-tip-nav">
-                <span class="sc-tip-count">
-                  {index + 1} / {steps.length}
-                </span>
-                {(index > 0 || demo.intro) && (
-                  <button type="button" class="sc-btn sc-btn-ghost" onClick={() => go(-1)}>
-                    {t.back}
-                  </button>
-                )}
-                <button type="button" class="sc-btn" onClick={() => go(1)}>
-                  {last ? t.finish : t.next}
-                </button>
-              </div>
-            </div>
-          )}
-        </StepScene>
-
-        {phase === "intro" && demo.intro && (
-          <div class="sc-cover">
-            <div class="sc-card">
-              <h2>{demo.intro.title}</h2>
-              {demo.intro.body && <p>{demo.intro.body}</p>}
-              <button type="button" class="sc-btn sc-btn-lg" onClick={() => setPhase("step")}>
-                {demo.intro.button || t.start}
+          <StepScene
+            key={step.id}
+            step={step}
+            src={demo.images[step.image] ?? ""}
+            view={view}
+            onAspect={setAspect}
+          >
+            {phase === "step" && hot && (
+              <button
+                type="button"
+                class="sc-hotspot"
+                style={{
+                  left: `${hot.x * 100}%`,
+                  top: `${hot.y * 100}%`,
+                  width: `${hot.w * 100}%`,
+                  height: `${hot.h * 100}%`,
+                }}
+                aria-label={step.title ? `${t.next}: ${step.title}` : t.nextStep}
+                onClick={() => go(1)}
+              >
+                <span class="sc-beacon" />
               </button>
-            </div>
-          </div>
-        )}
-        {phase === "end" && (
-          <div class="sc-cover">
-            <div class="sc-card">
-              <h2>{demo.outro?.title || t.end}</h2>
-              {demo.outro?.body && <p>{demo.outro.body}</p>}
-              <div class="sc-card-actions">
-                {demo.outro?.ctaLabel &&
-                  demo.outro.ctaUrl &&
-                  /^https?:\/\//i.test(demo.outro.ctaUrl) && (
-                    <a
-                      class="sc-btn sc-btn-lg"
-                      href={demo.outro.ctaUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {demo.outro.ctaLabel}
-                    </a>
+            )}
+            {phase === "step" && (
+              <div
+                ref={tip}
+                class={`sc-tip sc-tip-${hot ? placement : "free"} ${hot && hot.y + hot.h / 2 > 0.5 ? "sc-tip-low" : ""}`}
+                style={tooltipStyle(hot, placement)}
+                role="dialog"
+                aria-live="polite"
+              >
+                {step.title && <div class="sc-tip-title">{step.title}</div>}
+                {step.body && <div class="sc-tip-body">{step.body}</div>}
+                <div class="sc-tip-nav">
+                  <span class="sc-tip-count">
+                    {index + 1} / {steps.length}
+                  </span>
+                  {(index > 0 || demo.intro) && (
+                    <button type="button" class="sc-btn sc-btn-ghost" onClick={() => go(-1)}>
+                      {t.back}
+                    </button>
                   )}
-                <button type="button" class="sc-btn sc-btn-ghost sc-btn-lg" onClick={restart}>
-                  {t.replay}
+                  <button type="button" class="sc-btn" onClick={() => go(1)}>
+                    {last ? t.finish : t.next}
+                  </button>
+                </div>
+              </div>
+            )}
+          </StepScene>
+
+          {phase === "intro" && demo.intro && (
+            <div class="sc-cover">
+              <div class="sc-card">
+                <h2>{demo.intro.title}</h2>
+                {demo.intro.body && <p>{demo.intro.body}</p>}
+                <button type="button" class="sc-btn sc-btn-lg" onClick={() => setPhase("step")}>
+                  {demo.intro.button || t.start}
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
+          {phase === "end" && (
+            <div class="sc-cover">
+              <div class="sc-card">
+                <h2>{demo.outro?.title || t.end}</h2>
+                {demo.outro?.body && <p>{demo.outro.body}</p>}
+                <div class="sc-card-actions">
+                  {demo.outro?.ctaLabel &&
+                    demo.outro.ctaUrl &&
+                    /^https?:\/\//i.test(demo.outro.ctaUrl) && (
+                      <a
+                        class="sc-btn sc-btn-lg"
+                        href={demo.outro.ctaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {demo.outro.ctaLabel}
+                      </a>
+                    )}
+                  <button type="button" class="sc-btn sc-btn-ghost sc-btn-lg" onClick={restart}>
+                    {t.replay}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
-        <div class="sc-progress" aria-hidden="true">
-          <div
-            class="sc-progress-bar"
-            style={{
-              width: `${phase === "end" ? 100 : phase === "intro" ? 0 : ((index + 1) / steps.length) * 100}%`,
-            }}
-          />
+          <div class="sc-progress" aria-hidden="true">
+            <div
+              class="sc-progress-bar"
+              style={{
+                width: `${phase === "end" ? 100 : phase === "intro" ? 0 : ((index + 1) / steps.length) * 100}%`,
+              }}
+            />
+          </div>
         </div>
-      </div>
+      </Framed>
       {mode !== "embed" && branding && (
         <div class="sc-foot">
           <span class="sc-foot-title">{demo.title}</span>

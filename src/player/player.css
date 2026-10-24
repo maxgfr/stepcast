@@ -39,6 +39,55 @@
   box-shadow: none;
 }
 
+/* The demo's frame: sizes in cqw are fractions of the window's width, as in the videos. */
+.sc-backdrop {
+  container-type: inline-size;
+  margin: 0 auto;
+  border-radius: 12px;
+}
+.sc-full .sc-backdrop,
+.sc-embed .sc-backdrop {
+  border-radius: 0;
+}
+.sc-window {
+  overflow: hidden;
+  background: #0e0d14;
+}
+.sc-window-shadow {
+  box-shadow: 0 1.2cqw 3cqw rgba(10, 8, 24, 0.45);
+}
+.sc-backdrop .sc-frame,
+.sc-player:focus-visible .sc-backdrop .sc-frame {
+  border-radius: 0;
+  box-shadow: none;
+}
+.sc-player:focus-visible .sc-window {
+  outline: 3px solid color-mix(in srgb, var(--sc-accent) 45%, transparent);
+}
+.sc-winbar {
+  display: flex;
+  align-items: center;
+  gap: 1.06cqw;
+  height: 3.4cqw;
+  padding-left: 1.66cqw;
+  background: #24222e;
+}
+.sc-window-light .sc-winbar {
+  background: #ffffff;
+}
+.sc-winbar i {
+  width: 1.77cqw;
+  height: 1.77cqw;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+.sc-winbar i:nth-child(2) {
+  background: #febc2e;
+}
+.sc-winbar i:nth-child(3) {
+  background: #28c840;
+}
+
 .sc-viewport {
   position: absolute;
   inset: 0;

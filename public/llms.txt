@@ -40,6 +40,7 @@ at the top-left corner, `x`/`y` being the box's top-left corner.
 
 Fields:
 
+- `theme.frame`: null, or a background and window around the screenshots in the player and the videos: `{ "background": "aurora", "padding": 0.06, "radius": 0.012, "shadow": true, "window": "macos" }`. `background` is a gradient (`aurora`, `ocean`, `sunset`, `mint`, `dusk`, `paper`) or a CSS color; `window` is `none` or `macos`.
 - `language`: ISO 639-1 code of the texts (`en`, `fr`, `es`, `de`, `it`, `pt`, `nl`, `ru`, `zh`, `ja`, `ko`, `ar`, `hi`, `tr`, `pl`, `sv`); the player's buttons follow it.
 - `steps[].image`: a key of `images`; `images` maps keys to `data:` URLs.
 - `action`: `click`, `type` (a field to fill) or `look` (nothing to click; `hotspot` null).

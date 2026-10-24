@@ -229,6 +229,15 @@ test("manual mode: draw a hotspot, undo, preview", async ({ page }) => {
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.locator("dialog .sc-hotspot")).toBeVisible();
   await expect(page.locator("dialog").getByText("Press the shape")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // A frame goes around the stage in the player
+  await page.getByRole("tab", { name: "Demo" }).click();
+  await page.getByRole("button", { name: "Ocean" }).click();
+  await page.getByLabel("Window bar").check();
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.locator("dialog .sc-backdrop .sc-winbar")).toBeVisible();
+  await expect(page.locator("dialog .sc-backdrop .sc-hotspot")).toBeVisible();
 });
 
 test("an agent-written JSON demo opens, and travels through a Gist", async ({ page, context }) => {
