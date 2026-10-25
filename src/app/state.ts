@@ -3,7 +3,6 @@
  * edits saved to IndexedDB shortly after they happen, and an undo history.
  */
 import { batch, computed, signal } from "@preact/signals";
-import type { Transcript } from "llm-connect";
 import type { CapturedFrame } from "../capture/recorder";
 import type { SideTake } from "../capture/side";
 import { type Demo, emptyDemo, newId, newStep, type Step } from "../model/demo";
@@ -11,7 +10,6 @@ import {
   type Frame,
   getBlob,
   getProject,
-  type Narration,
   type Project,
   putBlob,
   type SideFile,
@@ -81,7 +79,7 @@ export async function createProject(
   frames: CapturedFrame[],
   recording: Blob | null,
   asSteps = false,
-  sides: { camera?: SideTake | null; narration?: (SideTake & { duration: number }) | null } = {},
+  sides: { camera?: SideTake | null } = {},
 ): Promise<string> {
   const id = newId("p");
   const stored: Frame[] = [];
@@ -108,16 +106,6 @@ export async function createProject(
     camera = { key: "camera", offset: sides.camera.offset };
     await putBlob(id, camera.key, sides.camera.blob);
   }
-  let narration: Narration | null = null;
-  if (sides.narration) {
-    narration = {
-      key: "narration",
-      offset: sides.narration.offset,
-      duration: sides.narration.duration,
-      transcript: null,
-    };
-    await putBlob(id, narration.key, sides.narration.blob);
-  }
   const demo = emptyDemo(title);
   if (asSteps) demo.steps = stored.map((f) => newStep(f.asset, { time: f.time }));
   const now = Date.now();
@@ -127,7 +115,6 @@ export async function createProject(
     frames: stored,
     recording: rec,
     camera,
-    narration,
     createdAt: now,
     updatedAt: now,
   });
@@ -201,14 +188,6 @@ export function updateDemo(fn: (d: Demo) => Demo, tag = ""): void {
   redoStack.length = 0;
   historySize.value = { undo: undoStack.length, redo: 0 };
   project.value = { ...p, demo: fn(p.demo) };
-  scheduleSave();
-}
-
-/** Keeps the narration's transcript with the project (not part of the demo: no undo). */
-export function setTranscript(transcript: Transcript): void {
-  const p = project.value;
-  if (!p?.narration) return;
-  project.value = { ...p, narration: { ...p.narration, transcript } };
   scheduleSave();
 }
 

@@ -1,28 +1,15 @@
 /*
- * Cross-origin isolation for a host that cannot send headers (GitHub Pages):
- * every response of this site comes back with COOP and COEP, so the page and
- * its workers may share memory, and speech to text runs on several threads.
- * Nothing is cached here; requests to other sites pass untouched.
+ * stepcast used a service worker for a while (to isolate the page for speech
+ * to text, now gone). This one only removes itself for visitors who still
+ * have it: it unregisters, and reloads the pages it controlled so they load
+ * straight from the network again.
  */
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
-
-self.addEventListener("fetch", (event) => {
-  const request = event.request;
-  if (new URL(request.url).origin !== self.location.origin) return;
-  if (request.cache === "only-if-cached" && request.mode !== "same-origin") return;
-  event.respondWith(
-    fetch(request).then((response) => {
-      if (response.status === 0) return response;
-      const headers = new Headers(response.headers);
-      headers.set("Cross-Origin-Opener-Policy", "same-origin");
-      headers.set("Cross-Origin-Embedder-Policy", "require-corp");
-      headers.set("Cross-Origin-Resource-Policy", "same-origin");
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    self.registration.unregister().then(async () => {
+      for (const client of await self.clients.matchAll({ type: "window" }))
+        client.navigate(client.url);
     }),
   );
 });

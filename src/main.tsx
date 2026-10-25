@@ -1,7 +1,6 @@
 import { render } from "preact";
 import { Editor } from "./app/editor/Editor";
 import { Home } from "./app/Home";
-import { isolate } from "./app/isolation";
 import { PlayPage } from "./app/PlayPage";
 import { Record } from "./app/Record";
 import { route } from "./app/router";
@@ -84,4 +83,3 @@ function App() {
 
 const root = document.getElementById("app");
 if (root) render(<App />, root);
-isolate();
