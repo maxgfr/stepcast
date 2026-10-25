@@ -45,18 +45,7 @@ export interface FrameNote {
   time: number | null;
   pinned: boolean;
   diff: Box | null;
-  /** What the user said around this frame, when they narrated the recording. */
-  said?: string;
 }
-
-/** A quote of what was said, cut to a readable length. */
-function quote(said: string, max: number): string {
-  const s = said.trim().replace(/\s+/g, " ");
-  return JSON.stringify(s.length > max ? `${s.slice(0, max - 1)}…` : s);
-}
-
-const NARRATION_RULE =
-  "- The user narrated the recording: when an image comes with what they said, write its title and text from it. Keep their meaning and their product's vocabulary, drop hesitations and filler words, and still write in the requested language.";
 
 export function clock(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds)) return "";
@@ -106,13 +95,6 @@ export function pickPrompt(
       pinned.length
         ? `The user pinned frames ${pinned.join(", ")} while recording: keep them unless they are duplicates.`
         : "",
-      ...(notes.some((n) => n.said)
-        ? [
-            "",
-            "The user narrated the recording. What they said up to each frame (use it to tell which screens matter):",
-            ...notes.flatMap((n, i) => (n.said ? [`#${i + 1}: ${quote(n.said, 300)}`] : [])),
-          ]
-        : []),
       "",
       `Choose at most ${b.maxSteps} frames, in the order the story is told (usually recording order). Each chosen frame becomes one step where the viewer clicks something to go on.`,
       "- Keep the screens that show a meaningful state: the starting point, each screen where an action is taken, the final result.",
@@ -124,7 +106,7 @@ export function pickPrompt(
   };
 }
 
-export function demoInstructions(b: Brief, grid = false, narrated = false): string {
+export function demoInstructions(b: Brief, grid = false): string {
   return [
     `You are the director of an interactive product demo (like Storylane or Arcade). Each step of the demo shows one screenshot from a screen recording, a hotspot on the element the viewer clicks to go on, and a short tooltip. You receive the screenshots, labeled "Image 1", "Image 2"…, and write the whole demo as the JSON the schema describes.`,
     "",
@@ -137,7 +119,6 @@ export function demoInstructions(b: Brief, grid = false, narrated = false): stri
     "- hotspot: the box of that control; null when target is null.",
     `- action: "click", "type" (a field to fill) or "look" (no interaction, hotspot null).`,
     '- title: at most 6 words, an imperative ("Open the billing page"). body: one or two sentences, at most 30 words, saying why it matters to the viewer, not only what to click.',
-    ...(narrated ? [NARRATION_RULE] : []),
     `- placement: where the tooltip goes relative to the hotspot: "auto" unless it would cover something important.`,
     b.zoom
       ? "- zoom: when the hotspot is small (under about 15% of the image width), a box around the region of interest, about 2 to 3 times the hotspot with some context, close to the image's aspect ratio. Otherwise null."
@@ -170,7 +151,6 @@ export function demoText(b: Brief, notes: FrameNote[]): string {
       const parts = [`Image ${i + 1}`];
       if (n.time !== null) parts.push(`at ${clock(n.time)}`);
       if (n.pinned) parts.push("pinned by the user");
-      if (n.said) parts.push(`the user said: ${quote(n.said, 600)}`);
       if (n.diff)
         parts.push(
           `region that changed since the previous screen: ${JSON.stringify(toGrid(n.diff))}`,
@@ -204,11 +184,7 @@ export function refineText(current: RefineAnswer, instruction: string): string {
 export function pastePrompt(b: Brief, notes: FrameNote[]): string {
   const schema = JSON.stringify(z.toJSONSchema(demoAnswerSchema), null, 1);
   return [
-    demoInstructions(
-      b,
-      true,
-      notes.some((n) => n.said),
-    ),
+    demoInstructions(b, true),
     "",
     `The attached picture holds ${notes.length} screenshots side by side, each labeled "Image N" in its top-left corner, each with its own pink 0–1000 grid. Coordinates are relative to each screenshot, not to the whole picture.`,
     "",

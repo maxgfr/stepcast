@@ -88,18 +88,12 @@ const cors = {
   "access-control-allow-methods": "GET, POST, OPTIONS",
 };
 
-async function record(
-  page: Page,
-  snaps = 2,
-  opts: { camera?: boolean; mic?: boolean; pause?: number } = {},
-) {
+async function record(page: Page, snaps = 2, opts: { camera?: boolean; pause?: number } = {}) {
   await page.goto("./#/record");
   if (opts.camera) await page.getByLabel(/Record my camera too/).check();
-  if (opts.mic) await page.getByLabel(/Narrate with my microphone/).check();
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(page.getByText(/Recording ·/)).toBeVisible();
   if (opts.camera) await expect(page.getByLabel("Camera preview")).toBeVisible();
-  if (opts.mic) await expect(page.getByText(/narrating/)).toBeVisible();
   for (let i = 0; i < snaps; i++) {
     await page.getByRole("button", { name: "Snap step" }).first().click();
     await page.waitForTimeout(opts.pause ?? 500);
@@ -114,23 +108,6 @@ test("home renders without errors", async ({ page }) => {
   await page.goto("./");
   await expect(page.getByRole("heading", { name: /Record your screen/ })).toBeVisible();
   await shot(page, "home");
-  expect(errors).toEqual([]);
-});
-
-test("the page is isolated, so speech to text can use several threads", async ({ page }) => {
-  await page.goto("./");
-  expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
-});
-
-test("on a host that sends no headers, the service worker isolates the page", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/bare/stepcast/");
-  // It reloads once when the worker takes over.
-  await expect
-    .poll(() => page.evaluate(() => crossOriginIsolated).catch(() => false), { timeout: 10_000 })
-    .toBe(true);
-  await expect(page.getByRole("heading", { name: /Record your screen/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -367,27 +344,4 @@ test("the camera recorded next to the screen becomes a bubble in the MP4", async
   );
   expect(corner.size[0]).toBeGreaterThan(0);
   expect(Math.min(...corner.ring)).toBeGreaterThan(200);
-});
-
-test("a narration is kept for the AI to read, and never played back", async ({ page, context }) => {
-  await context.grantPermissions(["microphone"]);
-  await record(page, 2, { mic: true, pause: 1500 });
-  await page.getByRole("button", { name: /Manual mode/ }).click();
-  await expect(page.locator(".step-item")).toHaveCount(2);
-  // The player has no voice
-  await page.getByRole("button", { name: "Preview" }).click();
-  await expect(page.locator("dialog .sc-hotspot, dialog .sc-tip").first()).toBeVisible();
-  await expect(page.locator("dialog .sc-voice")).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  // The AI panel offers to transcribe it, to write the steps from it
-  await page.getByRole("button", { name: "AI", exact: true }).click();
-  await expect(page.getByText("Your narration")).toBeVisible();
-  await expect(page.getByLabel("Transcribe with")).toBeVisible();
-  await page.keyboard.press("Escape");
-  // And the MP4 has no sound
-  await page.getByRole("button", { name: "Share" }).click();
-  const mp4 = page.waitForEvent("download", { timeout: 60_000 });
-  await page.getByRole("button", { name: "MP4 video" }).click();
-  const bytes = await readFile(await (await mp4).path());
-  expect(bytes.includes("mp4a") || bytes.includes("Opus")).toBe(false);
 });

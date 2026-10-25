@@ -1,11 +1,11 @@
 /**
- * A camera or a microphone recorded next to the screen, into a file of its
+ * The camera recorded next to the screen, into a file of its
  * own, paused and stopped with it. `offset` is where the file starts on the
  * screen recording's clock (the device's permission prompt comes after the
  * screen's), so the file's time t is the screen's offset + t.
  */
 
-export type SideKind = "camera" | "microphone";
+export type SideKind = "camera";
 
 /** A side file and where it starts on the screen recording's clock, in seconds. */
 export interface SideTake {
@@ -18,15 +18,10 @@ const CONSTRAINTS: Record<SideKind, MediaStreamConstraints> = {
     video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: "user" },
     audio: false,
   },
-  microphone: {
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    video: false,
-  },
 };
 
 const MIMES: Record<SideKind, string[]> = {
   camera: ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"],
-  microphone: ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"],
 };
 
 function pickMime(kind: SideKind): string {
