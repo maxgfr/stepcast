@@ -7,6 +7,7 @@ import type { CapturedFrame } from "../capture/recorder";
 import type { SideTake } from "../capture/side";
 import { type Demo, emptyDemo, newId, newStep, type Step } from "../model/demo";
 import {
+  deleteProject,
   type Frame,
   getBlob,
   getProject,
@@ -74,6 +75,20 @@ export function closeProject(): void {
   releaseAssets();
 }
 
+/**
+ * A project is written blob by blob: when one fails (the storage of
+ * maxgfr.github.io is shared by every site on it, and may be full), the ones
+ * already written are removed rather than left with no project to find them.
+ */
+async function discardOnFailure(id: string, make: () => Promise<string>): Promise<string> {
+  try {
+    return await make();
+  } catch (err) {
+    await deleteProject(id).catch(() => undefined);
+    throw err;
+  }
+}
+
 export async function createProject(
   title: string,
   frames: CapturedFrame[],
@@ -82,43 +97,45 @@ export async function createProject(
   sides: { camera?: SideTake | null } = {},
 ): Promise<string> {
   const id = newId("p");
-  const stored: Frame[] = [];
-  for (const f of frames) {
-    const asset = newId("a");
-    await putBlob(id, asset, f.blob);
-    stored.push({
-      id: newId("f"),
-      asset,
-      time: f.time,
-      diff: f.diff,
-      pinned: f.pinned,
-      width: f.width,
-      height: f.height,
+  return discardOnFailure(id, async () => {
+    const stored: Frame[] = [];
+    for (const f of frames) {
+      const asset = newId("a");
+      await putBlob(id, asset, f.blob);
+      stored.push({
+        id: newId("f"),
+        asset,
+        time: f.time,
+        diff: f.diff,
+        pinned: f.pinned,
+        width: f.width,
+        height: f.height,
+      });
+    }
+    let rec: string | null = null;
+    if (recording) {
+      rec = "recording";
+      await putBlob(id, rec, recording);
+    }
+    let camera: SideFile | null = null;
+    if (sides.camera) {
+      camera = { key: "camera", offset: sides.camera.offset };
+      await putBlob(id, camera.key, sides.camera.blob);
+    }
+    const demo = emptyDemo(title);
+    if (asSteps) demo.steps = stored.map((f) => newStep(f.asset, { time: f.time }));
+    const now = Date.now();
+    await saveProject({
+      id,
+      demo,
+      frames: stored,
+      recording: rec,
+      camera,
+      createdAt: now,
+      updatedAt: now,
     });
-  }
-  let rec: string | null = null;
-  if (recording) {
-    rec = "recording";
-    await putBlob(id, rec, recording);
-  }
-  let camera: SideFile | null = null;
-  if (sides.camera) {
-    camera = { key: "camera", offset: sides.camera.offset };
-    await putBlob(id, camera.key, sides.camera.blob);
-  }
-  const demo = emptyDemo(title);
-  if (asSteps) demo.steps = stored.map((f) => newStep(f.asset, { time: f.time }));
-  const now = Date.now();
-  await saveProject({
-    id,
-    demo,
-    frames: stored,
-    recording: rec,
-    camera,
-    createdAt: now,
-    updatedAt: now,
+    return id;
   });
-  return id;
 }
 
 /** Adds captured frames to the open project (after a video import, for instance). */
@@ -145,6 +162,10 @@ export async function addFrames(frames: CapturedFrame[]): Promise<Frame[]> {
 
 // --- Saving ---------------------------------------------------------------
 
+/** The origin's quota, shared by every site of maxgfr.github.io, is used up. */
+const storageFull = (err: unknown): boolean =>
+  err instanceof DOMException && err.name === "QuotaExceededError";
+
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleSave(): void {
   clearTimeout(saveTimer);
@@ -159,7 +180,11 @@ export async function flushSave(): Promise<void> {
     await saveProject(p);
     saveError.value = null;
   } catch (err) {
-    saveError.value = err instanceof Error ? err.message : "Could not save";
+    saveError.value = storageFull(err)
+      ? "storage for this site is full."
+      : err instanceof Error
+        ? err.message
+        : "Could not save";
   }
 }
 
@@ -246,38 +271,40 @@ export async function createProjectFromDemo(
   blobs: Record<string, Blob>,
 ): Promise<string> {
   const id = newId("p");
-  const frames: Frame[] = [];
-  const keyMap = new Map<string, string>();
-  for (const [key, blob] of Object.entries(blobs)) {
-    // Only screenshots (older files may also carry a recorded voice).
-    if (!blob.type.startsWith("image/")) continue;
-    const asset = newId("a");
-    keyMap.set(key, asset);
-    await putBlob(id, asset, blob);
-    const step = demo.steps.find((s) => s.image === key);
-    frames.push({
-      id: newId("f"),
-      asset,
-      time: step?.time ?? 0,
-      diff: null,
-      pinned: true,
-      width: 0,
-      height: 0,
+  return discardOnFailure(id, async () => {
+    const frames: Frame[] = [];
+    const keyMap = new Map<string, string>();
+    for (const [key, blob] of Object.entries(blobs)) {
+      // Only screenshots (older files may also carry a recorded voice).
+      if (!blob.type.startsWith("image/")) continue;
+      const asset = newId("a");
+      keyMap.set(key, asset);
+      await putBlob(id, asset, blob);
+      const step = demo.steps.find((s) => s.image === key);
+      frames.push({
+        id: newId("f"),
+        asset,
+        time: step?.time ?? 0,
+        diff: null,
+        pinned: true,
+        width: 0,
+        height: 0,
+      });
+    }
+    const steps = demo.steps
+      .filter((s) => keyMap.has(s.image))
+      .map((s) => ({ ...s, id: newId(), image: keyMap.get(s.image) as string }));
+    const now = Date.now();
+    await saveProject({
+      id,
+      demo: { ...demo, steps, images: {} },
+      frames,
+      recording: null,
+      createdAt: now,
+      updatedAt: now,
     });
-  }
-  const steps = demo.steps
-    .filter((s) => keyMap.has(s.image))
-    .map((s) => ({ ...s, id: newId(), image: keyMap.get(s.image) as string }));
-  const now = Date.now();
-  await saveProject({
-    id,
-    demo: { ...demo, steps, images: {} },
-    frames,
-    recording: null,
-    createdAt: now,
-    updatedAt: now,
+    return id;
   });
-  return id;
 }
 
 /** Images of a demo whose `images` are data: or blob: URLs, as blobs. */

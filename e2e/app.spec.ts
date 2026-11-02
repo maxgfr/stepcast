@@ -345,3 +345,56 @@ test("the camera recorded next to the screen becomes a bubble in the MP4", async
   expect(corner.size[0]).toBeGreaterThan(0);
   expect(Math.min(...corner.ring)).toBeGreaterThan(200);
 });
+
+test("when the shared storage is full, an import says so and leaves nothing behind", async ({
+  page,
+}) => {
+  // maxgfr.github.io is one origin for every project page: they share one quota.
+  await page.goto("./");
+  const png = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 32;
+    c.height = 20;
+    return c.toDataURL("image/png");
+  });
+  await page.evaluate(() => {
+    const put = IDBObjectStore.prototype.put;
+    let blobs = 0;
+    IDBObjectStore.prototype.put = function (
+      this: IDBObjectStore,
+      ...args: [unknown, IDBValidKey?]
+    ) {
+      if (this.name === "blobs" && ++blobs > 1)
+        throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+      return put.apply(this, args);
+    };
+  });
+  const demo = {
+    title: "Too big",
+    steps: [
+      { image: "s1", title: "One" },
+      { image: "s2", title: "Two" },
+    ],
+    images: { s1: png, s2: png },
+  };
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Open a stepcast file" }).click();
+  await (await chooser).setFiles({
+    name: "demo.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(demo)),
+  });
+  await expect(page.getByText("Storage for this site is full")).toBeVisible();
+  const left = await page.evaluate(
+    () =>
+      new Promise<number>((resolve, reject) => {
+        const req = indexedDB.open("stepcast");
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const count = req.result.transaction("blobs").objectStore("blobs").count();
+          count.onsuccess = () => resolve(count.result);
+        };
+      }),
+  );
+  expect(left).toBe(0);
+});
