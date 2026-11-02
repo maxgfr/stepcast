@@ -1,67 +1,113 @@
+import { sealedStore } from "llm-connect";
+
 /**
  * Big demos travel as a secret GitHub Gist: the bundle goes up with your own
  * token (gist scope), and the link carries only the Gist id. Anyone with the
- * link can read it; nothing else lists it. The token is kept encrypted under a
- * non-extractable WebCrypto key, like the AI keys.
+ * link can read it; nothing else lists it. The token is sealed under a
+ * non-extractable WebCrypto key (llm-connect's sealedStore), like the AI keys.
  */
 const API = "https://api.github.com";
 const FILE = "stepcast-demo.txt";
-const DB = "stepcast-vault";
+const TOKEN = "github-token";
+/** Before the sealed store: the key ("key") and the token sealed with it ("token"), store "kv". */
+const LEGACY_DB = "stepcast-vault";
 
-function idb<T>(fn: (s: IDBObjectStore) => IDBRequest<T>, mode: IDBTransactionMode): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const open = indexedDB.open(DB, 1);
-    open.onupgradeneeded = () => open.result.createObjectStore("kv");
-    open.onerror = () => reject(open.error);
+const secrets = sealedStore({ dbName: "stepcast-sealed" });
+/** The token when the browser could not store it (storage full or blocked): this page only. */
+let pageToken: string | null = null;
+
+/** The legacy database, or null when there is none (opening it does not create it). */
+function openLegacy(): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    let fresh = false;
+    const open = indexedDB.open(LEGACY_DB);
+    open.onupgradeneeded = () => {
+      fresh = true;
+      open.transaction?.abort();
+    };
+    open.onerror = () => resolve(null);
     open.onsuccess = () => {
-      const req = fn(open.result.transaction("kv", mode).objectStore("kv"));
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      if (fresh || !open.result.objectStoreNames.contains("kv")) {
+        open.result.close();
+        resolve(null);
+      } else resolve(open.result);
     };
   });
 }
 
-async function cryptoKey(): Promise<CryptoKey> {
-  const existing = await idb<CryptoKey | undefined>((s) => s.get("key"), "readonly");
-  if (existing) return existing;
-  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
-    "encrypt",
-    "decrypt",
-  ]);
-  await idb((s) => s.put(key, "key"), "readwrite");
-  return key;
+function dropLegacy(): Promise<void> {
+  return new Promise((resolve) => {
+    const req = indexedDB.deleteDatabase(LEGACY_DB);
+    req.onsuccess = req.onerror = req.onblocked = () => resolve();
+  });
 }
 
-export async function saveGithubToken(token: string): Promise<void> {
-  if (!token) {
-    await idb((s) => s.delete("token"), "readwrite");
-    return;
-  }
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    await cryptoKey(),
-    new TextEncoder().encode(token),
+/**
+ * A token saved before the sealed store: opened with its old key, sealed in the new store,
+ * and the old database removed only once the new copy is stored.
+ */
+async function migrateLegacy(): Promise<string | null> {
+  const db = await openLegacy();
+  if (!db) return null;
+  const rec = await new Promise<{ key?: unknown; token?: { iv: Uint8Array; data: ArrayBuffer } }>(
+    (resolve) => {
+      try {
+        const store = db.transaction("kv").objectStore("kv");
+        const key = store.get("key");
+        const token = store.get("token");
+        store.transaction.oncomplete = () => resolve({ key: key.result, token: token.result });
+        store.transaction.onerror = store.transaction.onabort = () => resolve({});
+      } catch {
+        resolve({});
+      }
+    },
   );
-  await idb((s) => s.put({ iv, data }, "token"), "readwrite");
+  db.close();
+  if (!(rec.key instanceof CryptoKey) || !rec.token) return null;
+  let token: string;
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: rec.token.iv as BufferSource },
+      rec.key,
+      rec.token.data,
+    );
+    token = new TextDecoder().decode(plain);
+  } catch {
+    return null;
+  }
+  if (await secrets.set(TOKEN, token)) await dropLegacy();
+  else pageToken = token;
+  return token;
+}
+
+/** False when the browser could not store it (storage full or blocked): kept for this page only. */
+export async function saveGithubToken(token: string): Promise<boolean> {
+  if (!token) {
+    await forgetGithubToken();
+    return true;
+  }
+  if ((await secrets.get(TOKEN)) === token || (await secrets.set(TOKEN, token))) {
+    pageToken = null;
+    await dropLegacy();
+    return true;
+  }
+  pageToken = token;
+  return false;
 }
 
 export async function loadGithubToken(): Promise<string> {
+  if (pageToken !== null) return pageToken;
   try {
-    const rec = await idb<{ iv: Uint8Array; data: ArrayBuffer } | undefined>(
-      (s) => s.get("token"),
-      "readonly",
-    );
-    if (!rec) return "";
-    const plain = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: rec.iv as BufferSource },
-      await cryptoKey(),
-      rec.data,
-    );
-    return new TextDecoder().decode(plain);
+    return (await secrets.get(TOKEN)) ?? (await migrateLegacy()) ?? "";
   } catch {
     return "";
   }
+}
+
+/** Removes the token from this device: the sealed copy, any older copy, and the page's. */
+export async function forgetGithubToken(): Promise<void> {
+  pageToken = null;
+  await Promise.all([secrets.delete(TOKEN).catch(() => {}), dropLegacy()]);
 }
 
 async function failure(res: Response): Promise<Error> {
