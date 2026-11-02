@@ -186,6 +186,9 @@ export function errorText(err: unknown): string {
   if (err instanceof DOMException && err.name === "AbortError") return "Cancelled.";
   if (err instanceof DOMException && err.name === "NotAllowedError")
     return "Permission was refused.";
+  // The origin's storage is shared by every site of maxgfr.github.io.
+  if (err instanceof DOMException && err.name === "QuotaExceededError")
+    return "Storage for this site is full: free space on this device or delete old demos.";
   return err instanceof Error ? err.message : String(err);
 }
 
