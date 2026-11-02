@@ -17,7 +17,7 @@ import {
   playLink,
   type VideoOptions,
 } from "../share/export";
-import { loadGithubToken, publishGist, saveGithubToken } from "../share/gist";
+import { forgetGithubToken, loadGithubToken, publishGist, saveGithubToken } from "../share/gist";
 import { bundleForLink, LINK_LIMIT, packDemo } from "../share/pack";
 import { flushSave, getAssetBlob, project } from "./state";
 import { Button, copyText, errorText, Field, Icon, Modal, toast } from "./ui";
@@ -59,6 +59,8 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   const link = useSignal<{ url: string; size: number; fits: boolean } | null>(null);
   const gist = useSignal("");
   const token = useSignal("");
+  /** Whether a token is saved on this device (or kept for this page), so it can be forgotten. */
+  const saved = useSignal(false);
   const busy = useSignal<string | null>(null);
   const ratio = useSignal(0);
   const videoText = useSignal<VideoText>("tooltips");
@@ -68,7 +70,10 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   const p = project.value;
 
   useEffect(() => {
-    void loadGithubToken().then((t) => (token.value = t));
+    void loadGithubToken().then((t) => {
+      token.value = t;
+      saved.value = !!t;
+    });
   }, []);
 
   if (!p) return null;
@@ -113,7 +118,15 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
   const makeGist = () =>
     task("Publishing to a secret Gist…", async () => {
       if (!token.value.trim()) throw new Error("Paste a GitHub token with the gist scope first.");
-      await saveGithubToken(token.value.trim());
+      const kept = await saveGithubToken(token.value.trim());
+      saved.value = true;
+      if (!kept) {
+        toast(
+          "This browser could not store the token (storage full or blocked): it is kept for this page only.",
+          "error",
+          7000,
+        );
+      }
       const packed = await packDemo(demo, getAssetBlob);
       const bundle = await encodeBundle(packed.demo, packed.blobs);
       const id = await publishGist(token.value.trim(), bundle, demo.title);
@@ -207,6 +220,22 @@ export function SharePanel({ onClose }: { onClose: () => void }) {
                   Publish
                 </Button>
               </div>
+            )}
+            {saved.value && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!!busy.value}
+                onClick={() =>
+                  void forgetGithubToken().then(() => {
+                    token.value = "";
+                    saved.value = false;
+                    toast("The GitHub token is gone from this device.", "success");
+                  })
+                }
+              >
+                Forget the token
+              </Button>
             )}
           </section>
 

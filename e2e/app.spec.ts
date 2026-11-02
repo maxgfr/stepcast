@@ -398,3 +398,184 @@ test("when the shared storage is full, an import says so and leaves nothing behi
   );
   expect(left).toBe(0);
 });
+
+/** Opens a one-step demo written as JSON, ready to share. */
+async function openJsonDemo(page: Page) {
+  await page.goto("./");
+  const png = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 32;
+    c.height = 20;
+    return c.toDataURL("image/png");
+  });
+  const demo = { title: "Token test", steps: [{ image: "s1", title: "One" }], images: { s1: png } };
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Open a stepcast file" }).click();
+  await (await chooser).setFiles({
+    name: "demo.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(demo)),
+  });
+  await expect(page.getByLabel("Demo title")).toHaveValue("Token test");
+}
+
+/** A Gist API that accepts any upload; the tokens it was sent go into `seen`. */
+async function mockGists(page: Page, seen: string[] = []) {
+  await page.route("https://api.github.com/gists**", (route) => {
+    seen.push(route.request().headers().authorization ?? "");
+    return route.fulfill({ status: 201, json: { id: "0123456789abcdef0123" } });
+  });
+  return seen;
+}
+
+/** Every value of a database as text, ArrayBuffers decoded, to look for a secret in clear. */
+async function dump(page: Page, name: string): Promise<string> {
+  return page.evaluate(
+    (dbName) =>
+      new Promise<string>((resolve, reject) => {
+        const req = indexedDB.open(dbName);
+        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+          const db = req.result;
+          const stores = [...db.objectStoreNames];
+          if (stores.length === 0) {
+            db.close();
+            return resolve("");
+          }
+          const tx = db.transaction(stores);
+          const out: string[] = [];
+          const text = (v: unknown): string => {
+            if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
+              const bytes =
+                v instanceof ArrayBuffer
+                  ? new Uint8Array(v)
+                  : new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+              return new TextDecoder().decode(bytes);
+            }
+            if (v && typeof v === "object") return Object.values(v).map(text).join(" ");
+            return String(v);
+          };
+          for (const s of stores) {
+            const all = tx.objectStore(s).getAll();
+            all.onsuccess = () => out.push(...all.result.map(text));
+          }
+          tx.oncomplete = () => {
+            db.close();
+            resolve(out.join("\n"));
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+    name,
+  );
+}
+
+const databases = (page: Page) =>
+  page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name ?? ""));
+
+async function openShare(page: Page) {
+  await page.getByRole("button", { name: "Share" }).click();
+  await expect(page.getByLabel("GitHub token")).toBeVisible();
+}
+
+test("the Gist token is sealed at rest, and forgotten on request", async ({ page }) => {
+  await openJsonDemo(page);
+  const seen = await mockGists(page);
+  await openShare(page);
+  await page.getByLabel("GitHub token").fill("ghp_test");
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByLabel("Gist link")).toBeVisible();
+  expect(seen).toContain("Bearer ghp_test");
+  for (const db of await databases(page)) {
+    expect(await dump(page, db)).not.toContain("ghp_test");
+  }
+  expect(await dump(page, "stepcast-sealed")).not.toBe("");
+
+  await page.reload();
+  await openShare(page);
+  await expect(page.getByLabel("GitHub token")).toHaveValue("ghp_test");
+  await page.getByRole("button", { name: "Forget the token" }).click();
+  await expect(page.getByLabel("GitHub token")).toHaveValue("");
+  await page.reload();
+  await openShare(page);
+  await expect(page.getByLabel("GitHub token")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Forget the token" })).toHaveCount(0);
+});
+
+test("a token sealed by an older version moves to the sealed store", async ({ page }) => {
+  await openJsonDemo(page);
+  const seen = await mockGists(page);
+  // The layout before: the key and the sealed token in "stepcast-vault".
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open("stepcast-vault", 1);
+        req.onupgradeneeded = () => req.result.createObjectStore("kv");
+        req.onerror = () => reject(req.error);
+        req.onsuccess = async () => {
+          const db = req.result;
+          const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
+            "encrypt",
+            "decrypt",
+          ]);
+          const iv = crypto.getRandomValues(new Uint8Array(12));
+          const data = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv },
+            key,
+            new TextEncoder().encode("ghp_test"),
+          );
+          const tx = db.transaction("kv", "readwrite");
+          tx.objectStore("kv").put(key, "key");
+          tx.objectStore("kv").put({ iv, data }, "token");
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+
+  await openShare(page);
+  await expect(page.getByLabel("GitHub token")).toHaveValue("ghp_test");
+  await expect.poll(() => databases(page)).not.toContain("stepcast-vault");
+  expect(await dump(page, "stepcast-sealed")).not.toContain("ghp_test");
+
+  // Still there after a reload, from the sealed store this time, and sent with the upload.
+  await page.reload();
+  await openShare(page);
+  await expect(page.getByLabel("GitHub token")).toHaveValue("ghp_test");
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByLabel("Gist link")).toBeVisible();
+  expect(seen).toContain("Bearer ghp_test");
+  expect(await databases(page)).not.toContain("stepcast-vault");
+});
+
+test("a token the full storage could not keep: said, and gone after a reload", async ({ page }) => {
+  await page.addInitScript(() => {
+    for (const method of ["put", "add"] as const) {
+      const original = IDBObjectStore.prototype[method];
+      IDBObjectStore.prototype[method] = function (this: IDBObjectStore, ...args) {
+        if (this.transaction.db.name === "stepcast-sealed") {
+          throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+        }
+        return original.apply(this, args as Parameters<typeof original>);
+      };
+    }
+  });
+  await openJsonDemo(page);
+  const seen = await mockGists(page);
+  await openShare(page);
+  await page.getByLabel("GitHub token").fill("ghp_test");
+  await page.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByText(/kept for this page only/)).toBeVisible();
+  await expect(page.getByLabel("Gist link")).toBeVisible();
+  expect(seen).toContain("Bearer ghp_test");
+  for (const db of await databases(page)) {
+    expect(await dump(page, db)).not.toContain("ghp_test");
+  }
+
+  await page.reload();
+  await openShare(page);
+  await expect(page.getByLabel("GitHub token")).toHaveValue("");
+});
